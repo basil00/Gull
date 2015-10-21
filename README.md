@@ -1,9 +1,11 @@
 Gull 3 Chess (LINUX)
 ====================
 
-This is a Linux port of Gull chess engine version 3!
+This is a Linux port of the Gull chess engine version 3!
 
 To build simply run `make` (from a terminal) in the `src` directory.
+
+Pre-built binaries are available here: https://github.com/basil00/Gull/releases
 
 Warning
 -------
