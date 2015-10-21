@@ -31,5 +31,6 @@ typedef int *GHandle;
 typedef int GProcess;
 
 #define __forceinline   inline
+#define __align(x)      __attribute__((aligned(x)))
 
 #endif

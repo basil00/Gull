@@ -413,7 +413,7 @@ typedef struct {
 	uint64 bb[16];
 	uint8 square[64];
 } GBoard;
-__declspec(align(64)) GBoard Board[1];
+__align(64) GBoard Board[1];
 uint64 Stack[2048];
 int sp, save_sp;
 uint64 nodes, check_node, check_node_smp;
@@ -436,7 +436,7 @@ typedef struct {
 	int margin, *start, *current;
 	int moves[230];
 } GData;
-__declspec(align(64)) GData Data[128];
+__align(64) GData Data[128];
 GData *Current = Data;
 #define FlagSort (1 << 0)
 #define FlagNoBcSort (1 << 1)
@@ -478,11 +478,11 @@ typedef struct {
 } GPawnEntry;
 #ifndef TUNER
 #define pawn_hash_size (1024 * 1024)
-__declspec(align(64)) GPawnEntry PawnHash[pawn_hash_size];
+__align(64) GPawnEntry PawnHash[pawn_hash_size];
 #else
 #define pawn_hash_size (32 * 1024)
-__declspec(align(64)) GPawnEntry PawnHashOne[pawn_hash_size];
-__declspec(align(64)) GPawnEntry PawnHashTwo[pawn_hash_size];
+__align(64) GPawnEntry PawnHashOne[pawn_hash_size];
+__align(64) GPawnEntry PawnHashTwo[pawn_hash_size];
 GPawnEntry * PawnHash = PawnHashOne;
 #endif
 #define pawn_hash_mask (pawn_hash_size - 1)
