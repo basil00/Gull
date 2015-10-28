@@ -6135,9 +6135,9 @@ void send_pv(int depth, int alpha, int beta, int score) {
 #endif
 	if (nps) nps = (snodes * 1000)/nps; 
 	if (score < beta) {
-		if (score <= alpha) fprintf(stdout,"info depth %d seldepth %d score %s%d upperbound nodes %I64d nps %I64d pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,pv_string);
-		else fprintf(stdout,"info depth %d seldepth %d score %s%d nodes %I64d nps %I64d pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,pv_string);
-	} else fprintf(stdout,"info depth %d seldepth %d score %s%d lowerbound nodes %I64d nps %I64d pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,pv_string);
+		if (score <= alpha) fprintf(stdout,"info depth %d seldepth %d score %s%d upperbound nodes %lld nps %lld pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,pv_string);
+		else fprintf(stdout,"info depth %d seldepth %d score %s%d nodes %lld nps %lld pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,pv_string);
+	} else fprintf(stdout,"info depth %d seldepth %d score %s%d lowerbound nodes %lld nps %lld pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,pv_string);
 	fflush(stdout);
 }
 
@@ -6200,7 +6200,7 @@ void send_multipv(int depth, int curr_number) {
 		snodes = nodes;
 #endif
 	    if (nps) nps = (snodes * 1000)/nps; 
-		fprintf(stdout,"info multipv %d depth %d score %s%d nodes %I64d nps %I64d pv %s\n",j + 1,(j <= curr_number ? depth : depth - 1),score_string,score,snodes,nps,pv_string);
+		fprintf(stdout,"info multipv %d depth %d score %s%d nodes %lld nps %lld pv %s\n",j + 1,(j <= curr_number ? depth : depth - 1),score_string,score,snodes,nps,pv_string);
 		fflush(stdout);
 	}
 }
@@ -6218,7 +6218,7 @@ void send_best_move() {
 #else
 	snodes = nodes;
 #endif
-	fprintf(stdout,"info nodes %I64d score cp %d\n",snodes,best_score);
+	fprintf(stdout,"info nodes %lld score cp %d\n",snodes,best_score);
 	if (!best_move) return;
 	Current = Data;
 	evaluate();

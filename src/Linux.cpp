@@ -129,7 +129,7 @@ GProcess CreateChildProcess(int child_id)
     if (id != 0)
         return id;
 
-    close(0);       // No need to stdin, stdout, stderr
+    close(0);       // No need for stdin, stdout, stderr
     close(1);
     close(2);
 
@@ -168,7 +168,7 @@ sint64 get_time()
 {
     struct timespec ts;
     unsigned tick = 0;
-    clock_gettime(CLOCK_REALTIME, &ts);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
     tick  = ts.tv_nsec / 1000000;
     tick += ts.tv_sec * 1000;
     return tick;
