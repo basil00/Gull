@@ -36,8 +36,14 @@
 
 #include <sys/mman.h>
 #include <poll.h>
-#include <sys/prctl.h>
 #include <unistd.h>
+
+#ifdef MACOSX   // MacOSX:
+#include <mach/mach_time.h>
+#define MAP_ANONYMOUS   MAP_ANON
+#else           // Linux:
+#include <sys/prctl.h>
+#endif 
 
 #define builtin_cpuid(f, ax, bx, cx, dx)    \
     __asm__ __volatile__ ("cpuid" : "=a" (ax), "=b" (bx), "=c" (cx), \
@@ -133,23 +139,26 @@ GProcess CreateChildProcess(int child_id)
     close(1);
     close(2);
 
+#ifndef MACOSX
+    // Linux:
     prctl(PR_SET_PDEATHSIG, SIGHUP);    // Ensure that the child dies with
                                         // the parent. (necessary?)
+#endif
 
     // Gull expects the child process to enter through main().
     // So we simply call main() here:
     char child_id_buf[32];
     int ret = snprintf(child_id_buf, sizeof(child_id_buf)-1, "%d", child_id);
     assert(ret > 0 && ret < sizeof(child_id_buf)-1);
-    char *argv[] =
+    const char *argv[] =
     {
-        "/proc/self/exe",
+        "Gull",     // Ignored, can be anything.
         "child",
         "0",
         child_id_buf,
         NULL
     };
-    ret = main(4, argv);
+    ret = main(4, (char **)argv);
     exit(ret);
 }
 
@@ -166,11 +175,39 @@ static void msleep(unsigned ms)
  */
 sint64 get_time()
 {
+#ifndef MACOSX
+    // Linux:
     struct timespec ts;
     unsigned tick = 0;
     clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
     tick  = ts.tv_nsec / 1000000;
     tick += ts.tv_sec * 1000;
     return tick;
+#else
+    // MacOSX:
+    return (sint64)mach_absolute_time() / 1000000;
+#endif
+}
+
+/*
+ * Cleanup child processes.
+ */
+void cleanup(void)
+{
+    if (!parent)
+        return;
+    int i;
+    for (i = 1; i < PrN; i++)
+        kill(ChildPr[i], SIGPIPE);
+}
+
+/*
+ * Deadly signal handler.
+ */
+void handler(int sig)
+{
+    cleanup();
+    signal(sig, SIG_DFL);
+    raise(sig);
 }
 

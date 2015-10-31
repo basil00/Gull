@@ -1,9 +1,22 @@
+UNAME=$(shell uname -s)
+ifeq ($(UNAME),Linux)
+    TARGET=gull.linux
+endif
+ifeq ($(UNAME),Darwin)
+    TARGET=gull.macosx
+endif
 CC=clang++
 STRIP=strip
-CFLAGS=-msse4.1 -mpopcnt -fpermissive -fno-exceptions -fno-rtti -w -O2
+CFLAGS=-msse4.1 -mpopcnt -fno-exceptions -fno-rtti -Wno-parentheses -O2
 
-gull:
-	$(CC) $(CFLAGS) Gull.cpp -o Gull
+main: $(TARGET)
+
+gull.linux:
+	$(CC) $(CFLAGS) -D LINUX Gull.cpp -o Gull
+	$(STRIP) Gull
+
+gull.macosx:
+	$(CC) $(CFLAGS) -D MACOSX Gull.cpp -o Gull
 	$(STRIP) Gull
 
 clean:

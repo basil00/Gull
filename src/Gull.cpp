@@ -1,4 +1,8 @@
 
+#ifdef MACOSX
+#define LINUX
+#endif
+
 #define W32_BUILD
 #undef W32_BUILD
 
@@ -40,8 +44,6 @@
 
 #define TIME_TO_DEPTH
 //#undef TIME_TO_DEPTH
-
-using namespace std;
 
 typedef unsigned char uint8;
 typedef char sint8;
@@ -6634,7 +6636,7 @@ void epd_test(const char *string, int time_limit) {
 			fprintf(stdout, "Position %d: %d [%lf, %d]\n", n, LastDepth / 2, ((double)total_depth) / ((double)n), (all_nodes * Convert(1000, uint64)) / total_time);
 #else
 			prod += log((double)new_time);
-			fprintf(stdout, "Position %d: %d [%.0lf, %d]\n", n, new_time, exp(prod / (double)n), (all_nodes * Convert(1000, uint64)) / total_time);
+			fprintf(stdout, "Position %d: %lld [%.0lf, %lld]\n", n, new_time, exp(prod / (double)n), (all_nodes * Convert(1000, uint64)) / total_time);
 #endif
 			goto new_position;
 		}
@@ -6837,10 +6839,19 @@ int main(int argc, char *argv[]) {
 			PrN = Min(CPUs, MaxPrN);
 			if (HT) PrN = Max(1, Min(PrN, CPUs / 2));
 		}
-#else   // LINUX
+#else   // LINUX, MACOSX
         WinParId = 0;
         CPUs = sysconf(_SC_NPROCESSORS_ONLN);       // TODO: HT?
         PrN = CPUs;
+        atexit(cleanup);
+        signal(SIGHUP, handler);                    // TODO: better way?
+        signal(SIGINT, handler);
+        signal(SIGQUIT, handler);
+        signal(SIGILL, handler);
+        signal(SIGABRT, handler);
+        signal(SIGSEGV, handler);
+        signal(SIGPIPE, handler);
+        signal(SIGTERM, handler);
 #endif
 	}
 
@@ -6882,8 +6893,8 @@ reset_jump:
 				WaitForSingleObject(ChildPr[i], INFINITE);
 				CloseHandle(ChildPr[i]);
 			}
-#else   // LINUX
-            for (i = 1; i < PrN; i++) kill(ChildPr[i], SIGTERM);
+#else   // LINUX, MACOSX
+            for (i = 1; i < PrN; i++) kill(ChildPr[i], SIGPIPE);
 #endif
 			Smpi->searching = Smpi->active_sp = Smpi->stop = 0;
 			for (i = 0; i < MaxSplitPoints; i++) Smpi->Sp->active = Smpi->Sp->claimed = 0;
