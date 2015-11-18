@@ -167,7 +167,7 @@ const uint8 UpdateCastling[64] = {
 	0xFF^CanCastle_ooo,0xFF,0xFF,0xFF,0xFF^(CanCastle_oo|CanCastle_ooo),0xFF,0xFF,0xFF^CanCastle_oo
 };
 
-const uint64 BMagic[64] = {
+extern const uint64 BMagic[64] = {
     0x0048610528020080, 0x00c4100212410004, 0x0004180181002010, 0x0004040188108502, 
     0x0012021008003040, 0x0002900420228000, 0x0080808410c00100, 0x000600410c500622, 
     0x00c0056084140184, 0x0080608816830050, 0x00a010050200b0c0, 0x0000510400800181, 
@@ -186,7 +186,7 @@ const uint64 BMagic[64] = {
     0x000008021020a200, 0x0000414128092100, 0x0000042002024200, 0x0002081204004200
 };
 
-const uint64 RMagic[64] = {
+extern const uint64 RMagic[64] = {
     0x00800011400080a6, 0x004000100120004e, 0x0080100008600082, 0x0080080016500080, 
     0x0080040008000280, 0x0080020005040080, 0x0080108046000100, 0x0080010000204080, 
     0x0010800424400082, 0x00004002c8201000, 0x000c802000100080, 0x00810010002100b8, 
@@ -205,7 +205,7 @@ const uint64 RMagic[64] = {
     0x0011001800021025, 0x00c9000400620811, 0x0032009001080224, 0x001400810044086a
 };
 
-const int BShift[64] = {
+extern const int BShift[64] = {
     58, 59, 59, 59, 59, 59, 59, 58, 
 	59, 59, 59, 59, 59, 59, 59, 59,
     59, 59, 57, 57, 57, 57, 59, 59, 
@@ -227,7 +227,7 @@ const int BOffset[64] = {
     4928, 4992, 5024, 5056, 5088, 5120, 5152, 5184 
 };
 
-const int RShift[64] = {
+extern const int RShift[64] = {
     52, 53, 53, 53, 53, 53, 53, 52, 
 	53, 54, 54, 54, 54, 54, 54, 53,
     53, 54, 54, 54, 54, 54, 54, 53, 
@@ -356,6 +356,12 @@ char GullCppFile[16384][256];
 #define KpkValue 300
 #define EvalValue 30000
 #define MateValue 32760
+#ifdef TB
+#define TBMateValue 30000
+#define TBCursedMateValue 3
+const int TbValues[5] = {-TBMateValue, -TBCursedMateValue, 0, TBCursedMateValue, TBMateValue};
+#define TbDepth (depth+6>=127?127:depth+6)
+#endif
 
 /* 
 general move:
@@ -995,6 +1001,9 @@ typedef struct {
 	volatile sint64 hash_size;
 	volatile int PrN;
 	GSP Sp[MaxSplitPoints];
+#if TB
+	char tb_path[1024];
+#endif
 } GSMPI;
 
 #define SharedMaterialOffset (sizeof(GSMPI))
@@ -1088,6 +1097,10 @@ void check_time(int time, int searching);
 void check_state();
 int input();
 void uci();
+
+#ifdef TB
+#include "tbprobe.h"
+#endif
 
 #include "Linux.cpp"
 
@@ -4774,6 +4787,7 @@ template <bool me, bool pv> int q_search(int alpha, int beta, int depth, int fla
 #endif
 	}
 #endif
+
 	if (flags & FlagCallEvaluation) evaluate();
 	if (Check(me)) return q_evasion<me, pv>(alpha, beta, depth, FlagHashCheck);
 	score = Current->score + 3;
@@ -5220,7 +5234,29 @@ template <bool me, bool exclusion> int search(int beta, int depth, int flags) {
 			if (F(flags & FlagReturnBestMove)) return Entry->low;
 		}
 	}
-	if (depth >= 20) if (GPVEntry * PVEntry = probe_pv_hash()) {
+
+#if TB
+	if (hash_depth < 0 && TB_LARGEST > 0 && popcnt(PieceAll) <= TB_LARGEST) {
+		unsigned res = tb_probe_wdl(Piece(White), Piece(Black),
+			King(White) | King(Black),
+			Queen(White) | Queen(Black),
+			Rook(White) | Rook(Black),
+			Bishop(White) | Bishop(Black),
+			Knight(White) | Knight(Black),
+			Pawn(White) | Pawn(Black),
+			Current->ply,
+			Current->castle_flags,
+			Current->ep_square,
+		(me == White));
+		if (res != TB_RESULT_FAILED) {
+			hash_high(TbValues[res], TbDepth);
+			hash_low(0, TbValues[res], TbDepth);
+			return TbValues[res];
+		}
+	}
+#endif
+
+    if (depth >= 20) if (GPVEntry * PVEntry = probe_pv_hash()) {
 		hash_low(PVEntry->move,PVEntry->value,PVEntry->depth);
 		hash_high(PVEntry->value,PVEntry->depth);
 		if (PVEntry->depth >= depth) {
@@ -5479,6 +5515,27 @@ template <bool me, bool exclusion> int search_evasion(int beta, int depth, int f
 			hash_value = PVEntry->value;
 		}
 	}
+
+#if TB
+	if (hash_depth < 0 && TB_LARGEST > 0 && popcnt(PieceAll) <= TB_LARGEST) {
+		unsigned res = tb_probe_wdl(Piece(White), Piece(Black),
+			King(White) | King(Black),
+			Queen(White) | Queen(Black),
+			Rook(White) | Rook(Black),
+			Bishop(White) | Bishop(Black),
+			Knight(White) | Knight(Black),
+			Pawn(White) | Pawn(Black),
+			Current->ply,
+			Current->castle_flags,
+			Current->ep_square,
+			(me == White));
+		if (res != TB_RESULT_FAILED) {
+			hash_high(TbValues[res], TbDepth);
+			hash_low(0, TbValues[res], TbDepth);
+			return TbValues[res];
+		}
+	}
+#endif
 
 	if (hash_depth >= depth && hash_value > -EvalValue) score = Min(beta - 1, Max(score, hash_value));
 	if (flags & FlagCallEvaluation) evaluate();
@@ -5849,6 +5906,48 @@ template <bool me> void root() {
 #endif
 	memcpy(Data,Current,sizeof(GData));
 	Current = Data;
+
+#ifdef TB
+	if (popcnt(PieceAll) <= TB_LARGEST) {
+		unsigned res = tb_probe_root(Piece(White), Piece(Black),
+			King(White) | King(Black),
+			Queen(White) | Queen(Black),
+			Rook(White) | Rook(Black),
+			Bishop(White) | Bishop(Black),
+			Knight(White) | Knight(Black),
+			Pawn(White) | Pawn(Black),
+			Current->ply,
+			Current->castle_flags,
+			Current->ep_square,
+			(me == White), NULL);
+		if (res != TB_RESULT_FAILED) {
+			best_score = TbValues[TB_GET_WDL(res)];
+			int flags = 0;
+			unsigned to = TB_GET_TO(res);
+			switch (TB_GET_PROMOTES(res)) {
+				case TB_PROMOTES_QUEEN:
+					flags |= FlagPQueen; break;
+				case TB_PROMOTES_ROOK:
+					flags |= FlagPRook; break;
+				case TB_PROMOTES_BISHOP:
+					flags |= (Bit(to) & LightArea? FlagPLight: FlagPDark);
+				case TB_PROMOTES_KNIGHT:
+					flags |= FlagPKnight; break;
+				default:
+					break;
+			}
+			best_move = (TB_GET_FROM(res) << 6) | to | flags;
+			char str[32];
+			move_to_string(best_move,str);
+			printf("info depth 1 seldepth 1 score cp %d nodes 1 nps 0 pv %s\n", best_score, str);   // Fake PV
+			send_best_move();
+			Searching = 0;
+			if (MaxPrN > 1) ZERO_BIT_64(Smpi->searching, 0);
+			return;
+		}
+	}
+#endif
+
 	evaluate();
 	gen_root_moves<me>();
 	if (PVN > 1) {
@@ -6671,10 +6770,18 @@ void uci() {
     ptr = strchr(mstring, '\n');
     if (ptr != NULL) *ptr = 0;
     if (!strcmp(mstring, "uci")) {
+#ifdef TB
+#ifndef W32_BUILD
+		fprintf(stdout,"id name Gull 3 x64 (syzygy)\n");
+#else
+		fprintf(stdout,"id name Gull 3 (syzygy)\n");
+#endif
+#else
 #ifndef W32_BUILD
 		fprintf(stdout,"id name Gull 3 x64\n");
 #else
 		fprintf(stdout,"id name Gull 3\n");
+#endif
 #endif
         fprintf(stdout,"id author ThinkingALot\n");
 #ifndef W32_BUILD
@@ -6697,6 +6804,9 @@ void uci() {
 		fprintf(stdout, "option name Threads type spin min 1 max %d default %d\n", Min(CPUs, MaxPrN), PrN);
 #ifdef LARGE_PAGES
 		fprintf(stdout, "option name Large memory pages type check default true\n");
+#endif
+#ifdef TB
+		fprintf(stdout, "option name SyzygyPath type string default <empty>\n");
 #endif
         fprintf(stdout,"uciok\n");
 		if (F(Searching)) init_search(1);
@@ -6736,6 +6846,13 @@ void uci() {
 					ResetHash = 0;
 					longjmp(ResetJump, 1);
 				}
+#ifdef TB
+			} else if (!memcmp(ptr, "SyzygyPath", 10)) {
+				ptr += 17;
+				strncpy(Smpi->tb_path,ptr,sizeof(Smpi->tb_path)-1);
+				ResetHash = 0;
+				longjmp(ResetJump, 1);
+#endif
 			} else if (!memcmp(ptr, "MultiPV", 7)) {
 				ptr += 14;
 			    PVN = atoi(ptr);
@@ -6877,10 +6994,18 @@ int main(int argc, char *argv[]) {
 	fflush(NULL);
 
     if (parent)
+#ifdef TB
+#ifndef W32_BUILD
+		fprintf(stdout, "Gull 3 x64 (syzygy)\n");
+#else
+		fprintf(stdout, "Gull 3 (syzygy)\n");
+#endif
+#else
 #ifndef W32_BUILD
 	    fprintf(stdout, "Gull 3 x64\n");
 #else
 	    fprintf(stdout, "Gull 3\n");
+#endif
 #endif
 
 reset_jump:
@@ -6912,6 +7037,10 @@ reset_jump:
 #endif
 	if (ResetHash) init_hash();
 	init_search(0);
+
+#ifdef TB
+	tb_init(Smpi->tb_path);
+#endif
 
 	if (child) while (true) check_state();
 	if (parent) for (i = 1; i < PrN; i++) ChildPr[i] = CreateChildProcess(i);

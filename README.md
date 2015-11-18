@@ -1,10 +1,13 @@
-Gull 3 Chess (LINUX and MACOSX)
-===============================
+Gull 3 Chess (LINUX and MACOSX and SYZYGY)
+==========================================
 
 This is a Linux/MacOSX port of the Gull chess engine version 3!
 
 To build simply run `make` (from a terminal) in the `src` directory.
-Use `make CC=g++` to use `g++` instead of the default `clang++`.
+
+To build syzygy Gull run `make syzygy` (from a terminal) in the `src`
+directory.  Note that the `Makefile` uses `wget` to automatically download
+the Fathom dependency (https://github.com/basil00/Fathom).
 
 Pre-built binaries are available here: https://github.com/basil00/Gull/releases
 
