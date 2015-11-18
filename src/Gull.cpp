@@ -6976,7 +6976,22 @@ int main(int argc, char *argv[]) {
 	SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
 #endif
 
+	// Read parameters from environment (optional).
+	const char *val;
+	if (parent) {
+		if ((val = getenv("GULL_HASH")) != NULL)
+			hash_size = (Bit(msb(atoi(val))) * Convert(1024 * 1024, sint64)) /
+				Convert(sizeof(GEntry), sint64);
+		if ((val = getenv("GULL_THREADS")) != NULL)
+			PrN = atoi(val);
+	}
+
 	init();
+
+#ifdef TB
+	if (parent && (val = getenv("GULL_SYZYGY_PATH")) != NULL)
+		strncpy(Smpi->tb_path,val,sizeof(Smpi->tb_path)-1);
+#endif
 
 #ifdef WINDOWS
 	StreamHandle = GetStdHandle(STD_INPUT_HANDLE);
