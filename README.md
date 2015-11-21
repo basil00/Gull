@@ -1,7 +1,8 @@
-Gull 3 Chess (LINUX/MACOSX/SYZYGY)
-==================================
+Gull 3 Chess (SYZYGY)
+=====================
 
-This is a Linux/MacOSX port of the Gull chess engine version 3!
+This is a portable (Linux/MacOSX/Windows) version the Gull chess engine
+version 3.
 
 To build simply run `make` (from a terminal) in the `src` directory.
 

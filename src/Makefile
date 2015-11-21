@@ -34,13 +34,29 @@ gull.macosx:
 	$(STRIP) Gull
 	cp Gull Gull.macosx
 
-gull.syzygy.macosx:
+gull.syzygy.macosx: tbprobe.o
 	$(CC) $(CFLAGS) -D MACOSX -D TB Gull.cpp tbprobe.o -o Gull
 	$(STRIP) Gull
 	cp Gull Gull.syzygy.macosx
 
+gull.windows: CC=x86_64-w64-mingw32-g++
+gull.windows: STRIP=x86_64-w64-mingw32-strip
+gull.windows:
+	$(CC) $(CFLAGS) -D WINDOWS Gull.cpp -o Gull.exe
+	$(STRIP) Gull.exe
+
+gull.syzygy.windows: CC=x86_64-w64-mingw32-g++
+gull.syzygy.windows: STRIP=x86_64-w64-mingw32-strip
+gull.syzygy.windows: tbprobe_windows.o
+	$(CC) $(CFLAGS) -D WINDOWS -D TB Gull.cpp tbprobe_windows.o -o Gull.exe
+	$(STRIP) Gull.exe
+
 tbprobe.o: tbprobe.c tbcore.c
 	$(CC) $(CFLAGS) -c tbprobe.c
+
+tbprobe_windows.o: CC=x86_64-w64-mingw32-g++
+tbprobe_windows.o: tbprobe.c tbcore.c
+	$(CC) $(CFLAGS) -c tbprobe.c -o tbprobe_windows.o
 
 tbprobe.c: Fathom-master.zip
 	unzip -o -j Fathom-master.zip "Fathom-master/src/tbprobe.h" -d "./"

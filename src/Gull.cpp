@@ -54,7 +54,13 @@ typedef int sint32;
 typedef unsigned long long uint64;
 typedef long long sint64;
 
+#ifdef LINUX
 #include "Linux.h"
+#endif
+
+#ifdef WINDOWS
+#include "Windows.h"
+#endif
 
 #define Convert(x,type) ((type)(x))
 
@@ -1102,7 +1108,13 @@ void uci();
 #include "tbprobe.h"
 #endif
 
+#ifdef LINUX
 #include "Linux.cpp"
+#endif
+
+#ifdef WINDOWS
+#include "Windows.cpp"
+#endif
 
 #ifdef TUNER
 #ifndef RECORD_GAMES
@@ -2077,15 +2089,13 @@ loop:
 
 #ifndef W32_BUILD
 __forceinline int lsb(uint64 x) {
-	register unsigned long y;
-//	_BitScanForward64(&y, x);
+	register unsigned long long y;
     __asm__("bsfq %1, %0": "=r"(y): "rm"(x));
 	return y;
 }
 
 __forceinline int msb(uint64 x) {
-	register unsigned long y;
-//	_BitScanReverse64(&y, x);
+	register unsigned long long y;
     __asm__("bsrq %1, %0": "=r"(y): "rm"(x));
 	return y;
 }
@@ -6933,6 +6943,7 @@ int main(int argc, char *argv[]) {
 
 	if (parent) {
 #ifdef WINDOWS
+        DWORD p;
         int CPUInfo[4] = { -1 };
         __cpuid(CPUInfo, 1);
 		if (((CPUInfo[3] >> 28) & 1) && GetProcAddress(GetModuleHandle(TEXT("kernel32")), "GetLogicalProcessorInformation") != NULL) {
@@ -6994,6 +7005,7 @@ int main(int argc, char *argv[]) {
 #endif
 
 #ifdef WINDOWS
+    DWORD p;
 	StreamHandle = GetStdHandle(STD_INPUT_HANDLE);
 	Console = GetConsoleMode(StreamHandle, &p);
 	if (Console) {
