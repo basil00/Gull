@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <setjmp.h>
 #include <windows.h>
+#include <intrin.h>
 
 typedef HANDLE GHandle;
 typedef HANDLE GProcess;
