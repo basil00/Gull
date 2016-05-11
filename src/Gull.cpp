@@ -432,6 +432,7 @@ uint64 Stack[2048];
 int sp, save_sp;
 uint64 nodes, check_node, check_node_smp;
 GBoard SaveBoard[1];
+uint64 tb_hits;
 
 typedef struct {
 	uint64 key, pawn_key;
@@ -1004,6 +1005,7 @@ typedef struct {
 #else
 	volatile long stop, fail_high;
 #endif
+	volatile long long tb_hits;
 	volatile sint64 hash_size;
 	volatile int PrN;
 	GSP Sp[MaxSplitPoints];
@@ -2688,7 +2690,7 @@ void init_search(int clear_hash) {
 		memset(PVHash,0,pv_hash_size * sizeof(GPVEntry));
 	}
 	get_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-	nodes = 0;
+	tb_hits = nodes = 0;
 	best_move = best_score = 0;
 	LastTime = LastValue = LastExactValue = InstCnt = 0;
 	LastSpeed = 0;
@@ -5182,6 +5184,8 @@ template <bool me, bool exclusion> int search(int beta, int depth, int flags) {
 		check_node_smp = nodes;
 		check_state();
 		if (nodes > check_node + 0x4000 && parent) {
+			builtin_sync_fetch_and_add(&Smpi->tb_hits, tb_hits);
+			tb_hits = 0;
 			check_node = nodes;
 			check_time(1);
 			if (Searching) SET_BIT_64(Smpi->searching, Id); // BUG, don't know why this is necessary
@@ -5259,6 +5263,7 @@ template <bool me, bool exclusion> int search(int beta, int depth, int flags) {
 			Current->ep_square,
 		(me == White));
 		if (res != TB_RESULT_FAILED) {
+			tb_hits++;
 			hash_high(TbValues[res], TbDepth);
 			hash_low(0, TbValues[res], TbDepth);
 			return TbValues[res];
@@ -5540,6 +5545,7 @@ template <bool me, bool exclusion> int search_evasion(int beta, int depth, int f
 			Current->ep_square,
 			(me == White));
 		if (res != TB_RESULT_FAILED) {
+			tb_hits++;
 			hash_high(TbValues[res], TbDepth);
 			hash_low(0, TbValues[res], TbDepth);
 			return TbValues[res];
@@ -5910,9 +5916,9 @@ template <bool me> void root() {
 	GPVEntry * PVEntry;
 
 	date++;
-	nodes = check_node = check_node_smp = 0;
+	tb_hits = nodes = check_node = check_node_smp = 0;
 #ifndef TUNER
-	if (parent) Smpi->nodes = 0;
+	if (parent) Smpi->tb_hits = Smpi->nodes = 0;
 #endif
 	memcpy(Data,Current,sizeof(GData));
 	Current = Data;
@@ -5949,7 +5955,7 @@ template <bool me> void root() {
 			best_move = (TB_GET_FROM(res) << 6) | to | flags;
 			char str[32];
 			move_to_string(best_move,str);
-			printf("info depth 1 seldepth 1 score cp %d nodes 1 nps 0 pv %s\n", best_score, str);   // Fake PV
+			printf("info depth 1 seldepth 1 score cp %d nodes 1 nps 0 tbhits 1 pv %s\n", best_score, str);   // Fake PV
 			send_best_move();
 			Searching = 0;
 			if (MaxPrN > 1) ZERO_BIT_64(Smpi->searching, 0);
@@ -6187,7 +6193,7 @@ template <bool me> int multipv(int depth) {
 
 void send_pv(int depth, int alpha, int beta, int score) {
 	int i, pos, move, mate = 0, mate_score, sel_depth;
-	sint64 nps, snodes;
+	sint64 nps, snodes, tbhits = 0;
 	if (F(Print)) return;
 	for (sel_depth = 1; sel_depth < 127 && T((Data + sel_depth)->att[0]); sel_depth++);
 	sel_depth--;
@@ -6241,20 +6247,21 @@ void send_pv(int depth, int alpha, int beta, int score) {
 	nps = get_time() - StartTime;
 #ifdef MP_NPS
 	snodes = Smpi->nodes;
+	tbhits = Smpi->tb_hits;
 #else
 	snodes = nodes;
 #endif
 	if (nps) nps = (snodes * 1000)/nps; 
 	if (score < beta) {
-		if (score <= alpha) fprintf(stdout,"info depth %d seldepth %d score %s%d upperbound nodes %lld nps %lld pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,pv_string);
-		else fprintf(stdout,"info depth %d seldepth %d score %s%d nodes %lld nps %lld pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,pv_string);
-	} else fprintf(stdout,"info depth %d seldepth %d score %s%d lowerbound nodes %lld nps %lld pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,pv_string);
+		if (score <= alpha) fprintf(stdout,"info depth %d seldepth %d score %s%d upperbound nodes %lld nps %lld tbhits %lld pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,tbhits,pv_string);
+		else fprintf(stdout,"info depth %d seldepth %d score %s%d nodes %lld nps %lld tbhits %lld pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,tbhits,pv_string);
+	} else fprintf(stdout,"info depth %d seldepth %d score %s%d lowerbound nodes %lld nps %lld tbhits %lld pv %s\n",depth,sel_depth,score_string,(mate ? mate_score : score),snodes,nps,tbhits,pv_string);
 	fflush(stdout);
 }
 
 void send_multipv(int depth, int curr_number) {
 	int i, j, pos, move, score;
-	sint64 nps, snodes;
+	sint64 nps, snodes, tbhits = 0;
 	if (F(Print)) return;
 	for (j = 0; j < PVN && T(MultiPV[j]); j++) {
 		pv_length = 63;
@@ -6307,11 +6314,12 @@ void send_multipv(int depth, int curr_number) {
 		nps = get_time() - StartTime;
 #ifdef MP_NPS
 		snodes = Smpi->nodes;
+		tbhits = Smpi->tb_hits;
 #else
 		snodes = nodes;
 #endif
 	    if (nps) nps = (snodes * 1000)/nps; 
-		fprintf(stdout,"info multipv %d depth %d score %s%d nodes %lld nps %lld pv %s\n",j + 1,(j <= curr_number ? depth : depth - 1),score_string,score,snodes,nps,pv_string);
+		fprintf(stdout,"info multipv %d depth %d score %s%d nodes %lld nps %lld tbhits %lld pv %s\n",j + 1,(j <= curr_number ? depth : depth - 1),score_string,score,snodes,nps,tbhits,pv_string);
 		fflush(stdout);
 	}
 }
