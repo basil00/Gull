@@ -6337,6 +6337,7 @@ void send_best_move() {
 #else
 	snodes = nodes;
 #endif
+	snodes += (snodes == 0);
 	fprintf(stdout,"info nodes %lld score cp %d\n",snodes,best_score);
 	if (!best_move) return;
 	Current = Data;
