@@ -30,6 +30,7 @@
 
 #include <xmmintrin.h>
 #include <popcntintrin.h>
+#include <x86intrin.h>
 
 #define builtin_cpuid(f, ax, bx, cx, dx)    \
     __asm__ __volatile__ ("cpuid" : "=a" (ax), "=b" (bx), "=c" (cx), \

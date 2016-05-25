@@ -33,6 +33,7 @@
 
 #include <xmmintrin.h>
 #include <popcntintrin.h>
+#include <x86intrin.h>
 
 #include <sys/mman.h>
 #include <poll.h>

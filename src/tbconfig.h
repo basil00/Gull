@@ -83,9 +83,14 @@ extern const uint64 RMagic[64];
 extern uint64 RMagicMask[64];
 extern const int RShift[64];
 extern uint64 *ROffsetPointer[64];
+#ifndef HNI
 #define TB_ROOK_ATTACKS(square, occ)                                    \
     (*(ROffsetPointer[(square)] + (((RMagicMask[(square)] & (occ)) *    \
         RMagic[(square)]) >> RShift[(square)])))
+#else
+#define TB_ROOK_ATTACKS(square, occ)                                    \
+    (*(ROffsetPointer[(square)] + _pext_u64((occ), RMagicMask[(square)])))
+#endif
 
 /*
  * Define TB_BISHOP_ATTACKS(square, occ) to return the bishop attacks bitboard
@@ -95,9 +100,14 @@ extern const uint64 BMagic[64];
 extern uint64 BMagicMask[64];
 extern const int BShift[64];
 extern uint64 *BOffsetPointer[64];
+#ifndef HNI
 #define TB_BISHOP_ATTACKS(square, occ)                                  \
     (*(BOffsetPointer[(square)] + (((BMagicMask[(square)] & (occ)) *    \
         BMagic[(square)]) >> BShift[(square)])))
+#else
+#define TB_BISHOP_ATTACKS(square, occ)                                  \
+    (*(BOffsetPointer[(square)] + _pext_u64((occ), BMagicMask[(square)])))
+#endif
 
 /*
  * Define TB_QUEEN_ATTACKS(square, occ) to return the queen attacks bitboard
