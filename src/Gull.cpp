@@ -6779,6 +6779,19 @@ void epd_test(const char *string, int time_limit) {
 	fclose(f);
 }
 
+void bench(int argc, char **argv) {
+	if (argc == 0) exit(1);
+	unsigned depth = atoi(argv[0]);
+	long long t0 = get_time();
+	for (int i = 1; i < argc; i++) {
+		get_board(argv[i]);
+		sprintf(mstring, "go depth %u\n", depth);
+		get_time_limit(mstring);
+	}
+	fprintf(stderr, "time: %lld\n", get_time() - t0);
+	exit(0);
+}
+
 void uci() {
     char *ptr = NULL;
 	int i;
@@ -6938,13 +6951,14 @@ void uci() {
 }
 
 int main(int argc, char *argv[]) {
-	int i, HT = 0;
+	int i, HT = 0, dobench = 0;
 
 	if (argc >= 2) if (!memcmp(argv[1], "child", 5)) {
 		child = 1; parent = 0;
 		WinParId = atoi(argv[2]);
 		Id = atoi(argv[3]);
 	}
+	if (argc >= 2) if (!memcmp(argv[1], "bench", 5)) dobench = 1;
 
     unsigned a, b, c, d;
     builtin_cpuid(1, a, b, c, d);
@@ -7078,6 +7092,7 @@ reset_jump:
 	tb_init(Smpi->tb_path);
 #endif
 
+	if (dobench) bench(argc-2, argv+2);
 	if (child) while (true) check_state();
 	if (parent) for (i = 1; i < PrN; i++) ChildPr[i] = CreateChildProcess(i);
 
