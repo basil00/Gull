@@ -11,10 +11,10 @@
 #define _WIN32_WINNT 0x0501
 #endif
 
-#ifndef W32_BUILD
-#define HNI
-#undef HNI
-#endif
+// #ifndef W32_BUILD
+// #define HNI
+// #undef HNI
+// #endif
 
 #define CPU_TIMING
 #undef CPU_TIMING

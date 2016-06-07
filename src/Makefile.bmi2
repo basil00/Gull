@@ -1,0 +1,32 @@
+UNAME=$(shell uname -s)
+ifeq ($(UNAME),Linux)
+    TARGET_SYZYGY=gull.syzygy.linux
+endif
+ifeq ($(UNAME),Darwin)
+    TARGET_SYZYGY=gull.syzygy.macosx
+endif
+CC=g++
+STRIP=strip
+CFLAGS=-m64 -msse4.2 -mavx2 -mbmi -mbmi2 -mpopcnt -fno-exceptions -fno-rtti -Wno-parentheses -O3 -D HNI
+
+main: $(TARGET)
+
+gull.syzygy.linux:
+	rm -f *.gcda
+	$(CC) $(CFLAGS) -fprofile-generate -D LINUX -D TB Gull.cpp tbprobe.c -o Gull
+	./Gull bench 16 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+	$(CC) $(CFLAGS) -fprofile-use -fno-peel-loops -fno-tracer -D LINUX -D TB -D HNI Gull.cpp tbprobe.c -o Gull
+	$(STRIP) Gull
+	cp Gull Gull.syzygy.linux
+
+gull.syzygy.windows: CC=x86_64-w64-mingw32-g++
+gull.syzygy.windows:
+	rm -f *.gcda
+	$(CC) $(CFLAGS) -static -fprofile-generate -D WINDOWS -D TB Gull.cpp tbprobe.c -o Gull.exe
+	./Gull.exe bench 16 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+	$(CC) $(CFLAGS) -fprofile-use -fno-peel-loops -fno-tracer -D WINDOWS -D TB Gull.cpp tbprobe.c -o Gull.exe
+	$(STRIP) Gull.exe
+
+clean:
+	rm -f Gull
+
