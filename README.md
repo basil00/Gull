@@ -1,5 +1,5 @@
-Gull 3 Chess (SYZYGY)
-=====================
+Gull 3 Chess (SYZYGY + LAZYSMP)
+===============================
 
 This is a portable (Linux/MacOSX/Windows) version the Gull chess engine
 version 3.

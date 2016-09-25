@@ -26,6 +26,8 @@
 #include <math.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,8 +38,12 @@
 #include <x86intrin.h>
 
 #include <sys/mman.h>
-#include <poll.h>
+#include <fcntl.h>
 #include <unistd.h>
+#include <sys/wait.h>
+
+#define UINT64_MAX  0xFFFFFFFFFFFFFFFFull       // XXX
+#define UINT32_MAX  0xFFFFFFFF
 
 #ifdef MACOSX   // MacOSX:
 #include <mach/mach_time.h>
@@ -50,117 +56,154 @@
     __asm__ __volatile__ ("cpuid" : "=a" (ax), "=b" (bx), "=c" (cx), \
         "=d" (dx) : "a" (f))
 
-#define builtin_popcnt_u64(x)   _mm_popcnt_u64((x))
+#define PAGE_SIZE       4096
+#define SIZE(size)      ((((size)-1) / PAGE_SIZE) * PAGE_SIZE + PAGE_SIZE)
 
 /*
- * Replacements for the Windows Interlocked* functions.
+ * Log a message.
  */
-#define builtin_sync_fetch_and_add(x, y)                \
-    __sync_fetch_and_add((x), (y))
-#define builtin_sync_fetch_and_or(x, y)                 \
-    __sync_fetch_and_or((x), (y))
-#define builtin_sync_fetch_and_and(x, y)                 \
-    __sync_fetch_and_and((x), (y))
-#define builtin_sync_bit_test_and_reset(x, y)           \
-    ((__sync_fetch_and_and((x), ~(1 << (y))) & (1 << (y))) != 0)
-#define builtin_sync_lock_test_and_set(x, y)            \
-    __sync_lock_test_and_set((x), (y))
-#define builtin_sync_val_compare_and_swap(x, y, z)      \
-    __sync_val_compare_and_swap((x), (z), (y))
-
-/*
- * Initialize the hash table.
- */
-void init_hash()
+static void log(const char *format, ...)
 {
-    static sint64 old_size = 0;
-    sint64 size = hash_size * sizeof(GEntry);
-    if (parent && Hash != NULL)
-        munmap(Hash, old_size);
-    old_size = size;
-    if (parent)
+    FILE *stream = fopen("gull.log", "a");
+    if (stream == NULL)
+        return;
+    va_list ap;
+    va_start(ap, format);
+    vfprintf(stream, format, ap);
+    va_end(ap);
+    fclose(stream);
+}
+
+/*
+ * Print an error message.
+ */
+#define error(format, ...)                                              \
+    do {                                                                \
+        log("error: " format "\n", ##__VA_ARGS__);                      \
+        fprintf(stderr, "error: " format "\n", ##__VA_ARGS__);          \
+        abort();                                                        \
+    } while (false)
+
+/*
+ * Init an object name.
+ */
+void init_object_name(char *name, size_t len, const char *basename, int idx)
+{
+    int r = snprintf(name, len, "/GULL_%s_%d", basename, idx);
+    if (r < 0 || r >= len)
+        error("failed to create object name: %s\n", strerror(errno));
+}
+
+/*
+ * Init an object.
+ */
+void *init_object(const char *object, size_t size, void *addr,
+    bool create, bool readonly, bool map, const void *value)
+{
+    int fd = -1;
+    int flags = 0;
+    if (object != NULL)
     {
-        // Unlike Windows Gull there is no need to create a file for this
-        // mapping.  Instead, the child process will simply inherit the
-        // mapping after the fork().
-        int prot = PROT_READ | PROT_WRITE,
-            flags = MAP_SHARED | MAP_ANONYMOUS;
-        Hash = (GEntry *)mmap(NULL, size, prot, flags, -1, 0);
-        assert(Hash != MAP_FAILED);
+        if (create)
+            fd = shm_open(object, O_RDWR | O_CREAT | O_CLOEXEC,
+                S_IRUSR | S_IWUSR);
+        else
+            fd = shm_open(object, O_RDWR | O_CLOEXEC, 0);
+        if (fd < 0)
+            error("failed to open object %s: %s", object, strerror(errno));
+        if (create && ftruncate(fd, SIZE(size)) != 0)
+            error("failed to truncate object %s: %s", object, strerror(errno));
+        flags |= MAP_SHARED;
     }
-    hash_mask = hash_size - 4;
-}
-
-/*
- * Initialize shared memory regions.
- */
-void init_shared()
-{
-    // This is similar to init_hash().
-    static sint64 old_size = 0;
-    sint64 size = SharedPVHashOffset + pv_hash_size * sizeof(GPVEntry);
-    if (parent && Smpi != NULL)
-        munmap(Smpi, old_size);
-    old_size = size;
-    if (parent)
+    else
+        flags |= MAP_PRIVATE | MAP_ANONYMOUS;
+    if (map)
     {
-        int prot = PROT_READ | PROT_WRITE,
-            flags = MAP_SHARED | MAP_ANONYMOUS;
-        Smpi = (GSMPI *)mmap(NULL, size, prot, flags, -1, 0);
-        assert(Smpi != MAP_FAILED);
+        int prot = PROT_READ | (readonly && value == NULL? 0: PROT_WRITE);
+        flags |= (addr == NULL? 0: MAP_FIXED);
+        void *ptr = mmap(addr, SIZE(size), prot, flags, fd, 0);
+        if (ptr == MAP_FAILED)
+            error("failed to map object %s: %s", object, strerror(errno));
+        if (value != NULL)
+        {
+            memcpy(ptr, value, size);
+            if (readonly && mprotect(ptr, SIZE(size), PROT_READ) != 0)
+                error("failed to protect object %s: %s", object,
+                    strerror(errno));
+        }
+        if (fd > 0)
+            close(fd);
+        return ptr;
     }
-    Material = (GMaterial*)(((char*)Smpi) + SharedMaterialOffset);
-    MagicAttacks = (uint64*)(((char*)Smpi) + SharedMagicOffset);
-    PVHash = (GPVEntry*)(((char*)Smpi) + SharedPVHashOffset);
+    if (fd > 0)
+        close(fd);
+    return NULL;
 }
 
 /*
- * Test if input is available.
+ * Remove object.
  */
-int input()
+void remove_object(const char *object)
 {
-    struct pollfd fds;
-    int ret;
-    fds.fd = 0;     // stdin
-    fds.events = POLLIN;
-    return poll(&fds, 1, 0);
+    if (shm_unlink(object) != 0)
+        error("failed to unlink object %s: %s", object, strerror(errno));
 }
 
 /*
- * Create a child process and return its ID.
+ * Delete an object.
  */
-int main(int argc, char **argv);        // Forward decl.
-GProcess CreateChildProcess(int child_id)
+void delete_object(void *addr, size_t size)
 {
-    GProcess id = fork();
-    if (id != 0)
-        return id;
+    if (munmap(addr, SIZE(size)) != 0)
+        error("failed to unmap object: %s", strerror(errno));
+}
 
-    close(0);       // No need for stdin, stdout, stderr
-    close(1);
-    close(2);
+/*
+ * Create a child process.
+ */
+void create_child(const char *hashName, const char *pvHashName,
+    const char *pawnHashName, const char *dataName, const char *settingsName,
+    const char *sharedName, const char *infoName, const char *tbPath)
+{
+    pid_t pid = fork();
+    if (pid < 0)
+        error("failed to fork: %s", strerror(errno));
+    if (pid != 0)
+        return;
+    prctl(PR_SET_PDEATHSIG, SIGHUP);
+    char exe[BUFSIZ];
+    ssize_t len = readlink("/proc/self/exe", exe, sizeof(exe)-1);
+    if (len < 0)
+        error("failed to read link: %s", strerror(errno));
+    exe[len] = '\0';
+    execl(exe, "Gull", "child", hashName, pvHashName, pawnHashName,
+        dataName, settingsName, sharedName, infoName, tbPath, NULL);
+    error("failed to exec: %s", strerror(errno));
+}
 
-#ifndef MACOSX
-    // Linux:
-    prctl(PR_SET_PDEATHSIG, SIGHUP);    // Ensure that the child dies with
-                                        // the parent. (necessary?)
-#endif
+/*
+ * Get the process ID.
+ */
+unsigned get_pid(void)
+{
+    return (unsigned)getpid();
+}
 
-    // Gull expects the child process to enter through main().
-    // So we simply call main() here:
-    char child_id_buf[32];
-    int ret = snprintf(child_id_buf, sizeof(child_id_buf)-1, "%d", child_id);
-    assert(ret > 0 && ret < sizeof(child_id_buf)-1);
-    const char *argv[] =
-    {
-        "Gull",     // Ignored, can be anything.
-        "child",
-        "0",
-        child_id_buf,
-        NULL
-    };
-    ret = main(4, (char **)argv);
-    exit(ret);
+/*
+ * Get the number of CPUs.
+ */
+unsigned get_num_cpus(void)
+{
+    return (unsigned)sysconf(_SC_NPROCESSORS_ONLN);
+}
+
+/*
+ * Nuke a chold process.
+ */
+static void nuke_child(unsigned pid)
+{
+    kill((pid_t)pid, SIGKILL);
+    waitpid(pid, NULL, 0);
 }
 
 /*
@@ -174,41 +217,152 @@ static void msleep(unsigned ms)
 /*
  * Get the time in milliseconds.
  */
-sint64 get_time()
+int64_t get_time()
 {
 #ifndef MACOSX
     // Linux:
     struct timespec ts;
     unsigned tick = 0;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    clock_gettime(CLOCK_MONOTONIC, &ts);
     tick  = ts.tv_nsec / 1000000;
     tick += ts.tv_sec * 1000;
     return tick;
 #else
     // MacOSX:
-    return (sint64)mach_absolute_time() / 1000000;
+    return (int64_t)mach_absolute_time() / 1000000;
 #endif
 }
 
 /*
- * Cleanup child processes.
+ * Threads.
  */
-void cleanup(void)
+#include <pthread.h>
+#include <sys/time.h>
+
+static void mutex_init(GMutex *mutex)
 {
-    if (!parent)
-        return;
-    int i;
-    for (i = 1; i < PrN; i++)
-        kill(ChildPr[i], SIGPIPE);
+    pthread_mutexattr_t attrs;
+    pthread_mutexattr_init(&attrs);
+    pthread_mutexattr_setpshared(&attrs, PTHREAD_PROCESS_SHARED);
+    pthread_mutex_init(mutex, &attrs);
+}
+
+static void cond_init(GCondVar *condVar)
+{
+    pthread_condattr_t attrs;
+    pthread_condattr_init(&attrs);
+    pthread_condattr_setpshared(&attrs, PTHREAD_PROCESS_SHARED);
+    pthread_condattr_setclock(&attrs, CLOCK_MONOTONIC);
+    pthread_cond_init(condVar, &attrs);
+}
+
+#define mutex_unlock    pthread_mutex_unlock
+#define cond_signal     pthread_cond_signal
+#define cond_broadcast  pthread_cond_broadcast
+#define cond_wait       pthread_cond_wait
+
+static void mutex_lock(GMutex *mutex)
+{
+    pthread_mutex_lock(mutex);
+}
+
+static bool mutex_lock(GMutex *mutex, uint64_t timeout)
+{
+    struct timespec ts;
+    if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
+    {
+        // Backup strat.
+        mutex_lock(mutex);
+        return false;
+    }
+    ts.tv_nsec += timeout * 1000000;
+    int r = pthread_mutex_timedlock(mutex, &ts);
+    return (r == ETIMEDOUT);
 }
 
 /*
- * Deadly signal handler.
+ * Input.
  */
-void handler(int sig)
+static bool get_line(char *line, unsigned linelen, uint64_t timeout)
 {
-    cleanup();
-    signal(sig, SIG_DFL);
-    raise(sig);
+    static char buf[4 * BUFSIZ];
+    static unsigned ptr = 0, end = 0;
+    unsigned i = 0;
+
+    while (true)
+    {
+        bool space = false;
+        while (ptr < end)
+        {
+            if (i >= linelen)
+                error("input buffer overflow");
+            char c = buf[ptr++];
+            switch (c)
+            {
+                case ' ': case '\r': case '\t': case '\n':
+                    if (!space)
+                    {
+                        line[i++] = ' ';
+                        space = true;
+                    }
+                    if (c == '\n')
+                    {
+                        line[i-1] = '\0';
+                        return false;
+                    }
+                    continue;
+                default:
+                    space = false;
+                    line[i++] = c;
+                    continue;
+            }
+        }
+
+        struct timeval tv;
+        tv.tv_sec  = timeout / 1000;
+        tv.tv_usec = (timeout % 1000) * 1000;
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(STDIN_FILENO, &fds);
+        ssize_t res = select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
+        if (res < 0)
+            error("failed to wait for input: %s", strerror(errno));
+        if (res == 0)
+            return true;   // Timeout
+
+        do
+        {
+            res = read(STDIN_FILENO, buf, sizeof(buf));
+        }
+        while (res < 0 && errno == EINTR);
+
+        if (res == 0)
+        {
+            line[0] = EOF;
+            return false;
+        }
+        if (res < 0)
+            error("failed to read input: %s", strerror(errno));
+
+        ptr = 0;
+        end = res;
+    }
+}
+
+/*
+ * Output.
+ */
+static void put_line(char *line, unsigned linelen)
+{
+    unsigned ptr = 0; 
+    while (ptr < linelen)
+    {
+        int res = write(STDOUT_FILENO, line + ptr, linelen - ptr);
+        if (res < 0 && errno == EINTR)
+            continue;
+        if (res < 0)
+            error("failed to write output: %s", strerror(errno));
+        ptr += (unsigned)res;
+    }
 }
 
