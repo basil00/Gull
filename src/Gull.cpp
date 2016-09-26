@@ -1205,7 +1205,6 @@ void init_search(int clear_hash) {
     hash_mask = hash_size - 4;
 
     get_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-//    best_move = best_score = 0;
     LastTime = LastValue = LastExactValue = InstCnt = 0;
     LastSpeed = 0;
     PVN = 1;
@@ -1319,6 +1318,36 @@ const char *get_board(const char fen[]) {
     SHARED->rootDepth = atoi(numStr);
     setup_board();
     return fen + pos;
+}
+
+static void dump_board(void)
+{
+    for (int i = 56; i >= 0; i -= 8)
+        for (int j = 0; j < 8; j++)
+        {
+            int piece = Square(i+j);
+            switch (piece)
+            {
+                case WhiteKing: putc('K', stderr); break;
+                case BlackKing: putc('k', stderr); break;
+                case WhiteQueen: putc('Q', stderr); break;
+                case BlackQueen: putc('q', stderr); break;
+                case WhiteRook: putc('R', stderr); break;
+                case BlackRook: putc('r', stderr); break;
+                case WhiteLight: putc('B', stderr); break;
+                case BlackLight: putc('b', stderr); break;
+                case WhiteDark: putc('B', stderr); break;
+                case BlackDark: putc('b', stderr); break;
+                case WhiteKnight: putc('N', stderr); break;
+                case BlackKnight: putc('n', stderr); break;
+                case WhitePawn: putc('P', stderr); break;
+                case BlackPawn: putc('p', stderr); break;
+                default: putc('.', stderr); break;
+            }
+            putc(' ', stderr);
+            if (j+1 == 8) putc('\n', stderr);
+        }
+    putc('\n', stderr);
 }
 
 inline GEntry * probe_hash() {
@@ -5102,7 +5131,7 @@ bad_command:
 
 int main(int argc, char **argv)
 {
-    if (argc > 1)
+    if (argc > 1 && strcmp(argv[1], "child") == 0)
     {
         if (argc != 10)
         {
@@ -5110,8 +5139,6 @@ int main(int argc, char **argv)
             fprintf(stderr, "usage: %s\n", argv[0]);
             exit(EXIT_FAILURE);
         }
-        if (strcmp(argv[1], "child") != 0)
-            goto usage;
 
         // CHILD:
         const char
@@ -5162,6 +5189,47 @@ int main(int argc, char **argv)
 
         worker();   // Wait for work from parent.
     }
+    else if (argc > 1 && strcmp(argv[1], "bench") == 0)
+    {
+        init_object(NULL, sizeof(GGlobalData), DATA, true, false, true, NULL);
+        init_data();
+        GSettings settings;
+        memset(&settings, 0, sizeof(settings));
+        settings.numThreads = 1;
+        settings.hashSize   = 8 * (1 << 20);        // 8MB
+        init_object(NULL, sizeof(GSettings), SETTINGS, true, true, true,
+            &settings);
+        init_object(NULL, sizeof(GSharedInfo), SHARED, true, false, true,
+            NULL);
+        mutex_init(&SHARED->mutex);
+        cond_init(&SHARED->goCondVar);
+        init_object(NULL, SETTINGS->hashSize, HASH, true, false, true, NULL);
+        init_object(NULL, pvHashSize, PVHASH, true, false, true, NULL);
+        init_object(NULL, pawnHashSize, PAWNHASH, true, false, true, NULL);
+        init_object(NULL, sizeof(GThreadInfo), INFO, true, false, true, NULL);
+        INFO->pid = get_pid();
+        THREADS[0] = INFO;
+
+        const int benchDepth = 14;
+        uint64_t t0 = get_time();
+        for (int i = 2; i < argc; i++)
+        {
+            init_search(false);
+            get_board(argv[i]);
+            INFO->stop = false;
+            SHARED->depthLimit = 2 * benchDepth + 2;
+            SHARED->softTimeLimit = UINT32_MAX;
+            SHARED->hardTimeLimit = UINT32_MAX;
+            SHARED->startTime = t0;
+            if (Current->turn == White) root<0>(); else root<1>();
+            send_best_move();
+        }
+        uint64_t t1 = get_time();
+        printf("TIME: %ldms\n", t1 - t0);
+        exit(EXIT_SUCCESS);
+    }
+    else if (argc > 1)
+        goto usage;
 
     // PARENT:
     printf("LazyGull\n");
@@ -5172,7 +5240,7 @@ int main(int argc, char **argv)
     size_t syzygyProbeDepth = 6;
     SyzygyPath[0] = '\0';
     const char *val;
-    if ((val = getenv("GULL_HASH_SIZE")) != NULL)
+    if ((val = getenv("GULL_HASH")) != NULL)
         hashSize = HASH_SIZE((size_t)atoi(val));
     if ((val = getenv("GULL_THREADS")) != NULL)
         numThreads = atoi(val);
