@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-#define GULL_MAGIC_BITBOARDS
 typedef struct
 {
     int16_t score;
@@ -27,6 +26,38 @@ typedef struct
 #define TotalMat ((2*(MatWQ+MatBQ)+MatWL+MatBL+MatWD+MatBD+2*(MatWR+MatBR+MatWN+MatBN)+8*(MatWP+MatBP)) + 1)
 
 #define MagicSize   107648
+
+#ifdef GULL_MAGIC_BITBOARDS
+#define BishopAttacks(sq, occ)                                          \
+    (*(DATA->BOffsetPointer[sq] +                                       \
+        (((DATA->BMagicMask[sq] & (occ)) *                              \
+            DATA->BMagic[sq]) >> DATA->BShift[sq])))
+#define RookAttacks(sq, occ)                                            \
+    (*(DATA->ROffsetPointer[sq] +                                       \
+        (((DATA->RMagicMask[sq] & (occ)) *                              \
+            DATA->RMagic[sq]) >> DATA->RShift[sq])))
+#endif  /* GULL_MAGIC_BITBOARDS */
+
+#ifdef GULL_PDEP_BITBOARDS
+typedef struct
+{
+    const uint16_t *data;
+    uint64_t premask;
+} GAttackInfo;
+
+#include <x86intrin.h>
+
+#define pdep(x, mask)           _pdep_u64((x), (mask))
+#define pext(x, mask)           _pext_u64((x), (mask))
+
+#define BishopAttacks(sq, occ)                                          \
+    pdep(DATA->BAttacks[sq].data[pext(occ, DATA->BAttacks[sq].premask)],\
+        DATA->BMask[sq])
+#define RookAttacks(sq, occ)                                            \
+    pdep(DATA->RAttacks[sq].data[pext(occ, DATA->RAttacks[sq].premask)],\
+         DATA->RMask[sq])
+
+#endif  /* GULL_PDEP_BITBOARDS */
 
 typedef struct
 {
@@ -112,6 +143,11 @@ typedef struct
     uint64_t *BOffsetPointer[64];
     uint64_t *ROffsetPointer[64];
     uint64_t MagicAttacks[MagicSize];
+#endif
+#ifdef GULL_PDEP_BITBOARDS
+    GAttackInfo BAttacks[64];
+    GAttackInfo RAttacks[64];
+    uint16_t MagicAttacks[MagicSize];
 #endif
 } GGlobalData;
 

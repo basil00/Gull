@@ -64,7 +64,7 @@
  */
 static void log(const char *format, ...)
 {
-    FILE *stream = fopen("gull.log", "a");
+    FILE *stream = fopen("lazygull.log", "a");
     if (stream == NULL)
         return;
     va_list ap;
@@ -87,11 +87,12 @@ static void log(const char *format, ...)
 /*
  * Init an object name.
  */
-void init_object_name(char *name, size_t len, const char *basename, int idx)
+void init_object_name(char *name, size_t len, const char *basename,
+    unsigned id, int idx)
 {
-    int r = snprintf(name, len, "/GULL_%s_%d", basename, idx);
+    int r = snprintf(name, len, "/LazyGull_%u_%s_%d", id, basename, idx);
     if (r < 0 || r >= len)
-        error("failed to create object name: %s\n", strerror(errno));
+        error("failed to create object name: %s", strerror(errno));
 }
 
 /*
@@ -171,7 +172,7 @@ void create_child(const char *hashName, const char *pvHashName,
     if (pid != 0)
         return;
     prctl(PR_SET_PDEATHSIG, SIGHUP);
-    char exe[BUFSIZ];
+    char exe[PATH_MAX];
     ssize_t len = readlink("/proc/self/exe", exe, sizeof(exe)-1);
     if (len < 0)
         error("failed to read link: %s", strerror(errno));
@@ -257,9 +258,6 @@ static void cond_init(GCondVar *condVar)
 }
 
 #define mutex_unlock    pthread_mutex_unlock
-#define cond_signal     pthread_cond_signal
-#define cond_broadcast  pthread_cond_broadcast
-#define cond_wait       pthread_cond_wait
 
 static void mutex_lock(GMutex *mutex)
 {
@@ -280,12 +278,26 @@ static bool mutex_lock(GMutex *mutex, uint64_t timeout)
     return (r == ETIMEDOUT);
 }
 
+static void mutex_free(GMutex *mutex)
+{
+    // NOP 
+}
+
+#define cond_signal     pthread_cond_signal
+#define cond_broadcast  pthread_cond_broadcast
+#define cond_wait       pthread_cond_wait
+
+static void cond_free(GCondVar *mutex)
+{
+    // NOP
+}
+
 /*
  * Input.
  */
 static bool get_line(char *line, unsigned linelen, uint64_t timeout)
 {
-    static char buf[4 * BUFSIZ];
+    static char buf[4 * IOSIZE];
     static unsigned ptr = 0, end = 0;
     unsigned i = 0;
 
@@ -364,5 +376,13 @@ static void put_line(char *line, unsigned linelen)
             error("failed to write output: %s", strerror(errno));
         ptr += (unsigned)res;
     }
+}
+
+/*
+ * O/S specific init.
+ */
+static void init_os(void)
+{
+    // NOP.
 }
 

@@ -38,6 +38,7 @@ typedef pthread_cond_t GCondVar;
 #define __align(x)      __attribute__((aligned(x)))
 
 #define PATH_MAX        4096
+#define SIZE_T          "zu"
 
 #define INFO            ((GThreadInfo *)0x300000)
 #define SETTINGS        ((GSettings *)0x301000)
@@ -46,5 +47,7 @@ typedef pthread_cond_t GCondVar;
 #define PAWNHASH        ((GPawnEntry *)0x10000000)
 #define PVHASH          ((GPVEntry *)0x20000000)
 #define HASH            ((GEntry *)0x40000000)
+
+#define IOSIZE          4096
 
 #endif

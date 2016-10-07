@@ -86,29 +86,13 @@
  * Define TB_ROOK_ATTACKS(square, occ) to return the rook attacks bitboard
  * for a rook at `square' assuming the given `occ' occupancy bitboard.
  */
-#ifndef HNI
-#define TB_ROOK_ATTACKS(square, occ)                                        \
-    (*(DATA->ROffsetPointer[(square)] +                                     \
-        (((DATA->RMagicMask[(square)] & (occ)) *  \
-            DATA->RMagic[(square)]) >> DATA->RShift[(square)])))
-#else
-#define TB_ROOK_ATTACKS(square, occ)                                        \
-    (*(ROffsetPointer[(square)] + _pext_u64((occ), RMagicMask[(square)])))
-#endif
+#define TB_ROOK_ATTACKS(square, occ)        RookAttacks((square), (occ))
 
 /*
  * Define TB_BISHOP_ATTACKS(square, occ) to return the bishop attacks bitboard
  * for a bishop at `square' assuming the given `occ' occupancy bitboard.
  */
-#ifndef HNI
-#define TB_BISHOP_ATTACKS(square, occ)                                      \
-    (*(DATA->BOffsetPointer[(square)] +                                     \
-        (((DATA->BMagicMask[(square)] & (occ)) *  \
-            DATA->BMagic[(square)]) >> DATA->BShift[(square)])))
-#else
-#define TB_BISHOP_ATTACKS(square, occ)                                      \
-    (*(BOffsetPointer[(square)] + _pext_u64((occ), BMagicMask[(square)])))
-#endif
+#define TB_BISHOP_ATTACKS(square, occ)      BishopAttacks((square), (occ))
 
 /*
  * Define TB_QUEEN_ATTACKS(square, occ) to return the queen attacks bitboard

@@ -18,6 +18,7 @@ uint64_t RMagicAttacks(int i, uint64_t occ)
     return att;
 }
 
+#ifdef GULL_MAGIC_BITBOARDS
 static void init_magic(void)
 {
     int i, j, k, index, bits, bit_list[16];
@@ -58,6 +59,48 @@ static void init_magic(void)
     memcpy(DATA->BShift, BShift, sizeof(DATA->BShift));
     memcpy(DATA->RShift, RShift, sizeof(DATA->RShift));
 }
+#endif
+
+#ifdef GULL_PDEP_BITBOARDS
+static void init_magic(void)
+{
+    unsigned offset = 0;
+    for (unsigned i = 0; i < 64; i++)
+    {
+        GAttackInfo *info = DATA->BAttacks + i;
+        info->data = DATA->MagicAttacks + offset;
+        uint64_t postmask = DATA->BMask[i];
+        uint64_t premask = postmask & Interior;
+        info->premask = premask;
+        unsigned bits = (1 << popcount(premask));
+        for (unsigned j = 0; j < bits; j++)
+        {
+            uint64_t occ = pdep(j, premask);
+            uint64_t att = BMagicAttacks(i, occ);
+            DATA->MagicAttacks[offset++] = (uint16_t)pext(att, postmask);
+        }
+    }
+    for (unsigned i = 0; i < 64; i++)
+    {
+        GAttackInfo *info = DATA->RAttacks + i;
+        info->data = DATA->MagicAttacks + offset;
+        uint64_t postmask = DATA->RMask[i];
+        uint64_t premask = postmask;
+        if (File(i) > 0) premask &= ~DATA->File[0];
+        if (Rank(i) > 0) premask &= ~DATA->Line[0];
+        if (File(i) < 7) premask &= ~DATA->File[7];
+        if (Rank(i) < 7) premask &= ~DATA->Line[7];
+        info->premask = premask;
+        unsigned bits = (1 << popcount(premask));
+        for (unsigned j = 0; j < bits; j++)
+        {
+            uint64_t occ = pdep(j, premask);
+            uint64_t att = RMagicAttacks(i, occ);
+            DATA->MagicAttacks[offset++] = (uint16_t)pext(att, postmask);
+        }
+    }
+}
+#endif
 
 static void init_misc(void)
 {
@@ -108,12 +151,14 @@ static void init_misc(void)
         DATA->RMask[i] = DATA->HLine[i] | DATA->VLine[i];
         DATA->BMask[i] = DATA->NDiag[i] | DATA->SDiag[i];
         DATA->QMask[i] = DATA->RMask[i] | DATA->BMask[i];
+#ifdef GULL_MAGIC_BITBOARDS
         DATA->BMagicMask[i] = DATA->BMask[i] & Interior;
         DATA->RMagicMask[i] = DATA->RMask[i];
         if (File(i) > 0) DATA->RMagicMask[i] &= ~DATA->File[0];
         if (Rank(i) > 0) DATA->RMagicMask[i] &= ~DATA->Line[0];
         if (File(i) < 7) DATA->RMagicMask[i] &= ~DATA->File[7];
         if (Rank(i) < 7) DATA->RMagicMask[i] &= ~DATA->Line[7];
+#endif
         for (j = 0; j < 64; j++) if (DATA->NAtt[i] & DATA->NAtt[j])
             Add(DATA->NArea[i], j);
     }

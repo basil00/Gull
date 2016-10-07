@@ -1,14 +1,20 @@
-Gull 3 Chess (SYZYGY + LAZYSMP)
-===============================
+The LazyGull Chess Engine
+=========================
 
-This is a portable (Linux/MacOSX/Windows) version the Gull chess engine
-version 3.
+LazyGull is a free UCI chess engine derived from Gull 3.  Compared to Gull,
+LazyGull implements the following new features:
 
-To build simply run `make` (from a terminal) in the `src` directory.
+* Syzygy Tablebase support;
+* LazySMP implementation;
+* PDEP Bitboards for modern CPUs; and
+* Portable to Windows, Linux and MacOSX.
 
-To build syzygy Gull run `make syzygy` (from a terminal) in the `src`
-directory.  Note that the `Makefile` uses `wget` to automatically download
-the Fathom dependency (https://github.com/basil00/Fathom).
+To build simply run the following commands in the `src` directory:
+
+    make -f Makefile.linux
+    make -f Makefile.windows
+
+And follow the instructions.
 
 Pre-built binaries are available here: https://github.com/basil00/Gull/releases
 

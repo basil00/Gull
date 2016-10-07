@@ -65,7 +65,7 @@
 #define PVarC(prefix,var,me) ((me) ? (prefix.var##_b) : (prefix.var##_w))
 
 #define Bit(x) (Convert(1,uint64_t) << (x))
-#ifndef HNI
+#ifndef GULL_PDEP_BITBOARDS
 #define Cut(x) (x &= (x) - 1)
 #else
 #define Cut(x) (x = _blsr_u64(x))
@@ -253,19 +253,6 @@ const int32_t ROffset[64] =
 };
 #endif
 
-#ifndef HNI
-#define BishopAttacks(sq, occ)                                          \
-    (*(DATA->BOffsetPointer[sq] +                                       \
-        (((DATA->BMagicMask[sq] & (occ)) *                              \
-            DATA->BMagic[sq]) >> DATA->BShift[sq])))
-#define RookAttacks(sq, occ)                                            \
-    (*(DATA->ROffsetPointer[sq] +                                       \
-        (((DATA->RMagicMask[sq] & (occ)) *                              \
-            DATA->RMagic[sq]) >> DATA->RShift[sq])))
-#else
-#define BishopAttacks(sq,occ) (*(BOffsetPointer[sq] + _pext_u64(occ,BMagicMask[sq])))
-#define RookAttacks(sq,occ) (*(ROffsetPointer[sq] + _pext_u64(occ,RMagicMask[sq])))
-#endif
 #define QueenAttacks(sq, occ)   (BishopAttacks(sq, occ) | RookAttacks(sq, occ))
 
 #define FlagUnusualMaterial (1 << 30)
@@ -431,7 +418,7 @@ typedef struct {
     int margin, *start, *current;
     int moves[230];
 } GData;
-__align(64) GData Data[128];
+__align(64) GData Data[256];
 GData *Current = Data;
 #define FlagSort (1 << 0)
 #define FlagNoBcSort (1 << 1)
@@ -560,9 +547,6 @@ int Aspiration = 1, LargePages = 1;
 #define InfoDelay 1000
 int64_t InfoTime;
 uint16_t SMoves[256];
-
-jmp_buf Jump, ResetJump;
-GHandle StreamHandle; 
 
 #define ExclSingle(depth) 8
 #define ExclDouble(depth) 16
@@ -827,6 +811,9 @@ typedef struct
     int selDepth;
     int bestMove;
     int bestScore;
+#ifdef WINDOWS
+    GEvent goEvent;
+#endif
     int PV[];
 } GThreadInfo;
 #define MAX_PV_LEN      ((PAGE_SIZE - sizeof(GThreadInfo)) / sizeof(int))
@@ -836,6 +823,7 @@ typedef struct
     unsigned numThreads;
     unsigned syzygyProbeDepth;
     size_t hashSize;
+    unsigned parentPid;
 } GSettings;
 
 typedef struct
@@ -844,8 +832,13 @@ typedef struct
     int init;
     uint16_t date;
     GMutex mutex;
+#ifdef LINUX
     GCondVar goCondVar;
     GCondVar initCondVar;
+#endif
+#ifdef WINDOWS
+    GEvent initEvent;
+#endif
     unsigned rootDepth;
     unsigned depthLimit;
     uint64_t startTime;
@@ -1043,7 +1036,7 @@ uint64_t rand64(void)
     return key | Convert(rand16(),uint64_t);
 }
 
-static char SyzygyPath[BUFSIZ] = {'\0'};
+static char SyzygyPath[PATH_MAX] = {'\0'};
 #define MAX_THREADS     (PAGE_SIZE / sizeof(GThreadInfo *))
 static GThreadInfo *THREADS[MAX_THREADS] = {NULL};
 
@@ -1089,7 +1082,7 @@ static void go(void)
             int bestMove = (TB_GET_FROM(res) << 6) | to | flags;
             char movStr[16];
             move_to_string(bestMove, movStr);
-            char line[BUFSIZ];
+            char line[IOSIZE];
             int len = snprintf(line, sizeof(line)-1, "info depth 1 seldepth 1 "
                 "score cp %d nodes 1 tbhits 1 pv %s\n", bestScore, movStr);
             if (len > 0 && len < sizeof(line)-1)
@@ -1119,12 +1112,24 @@ static void go(void)
         THREADS[i]->PV[0]     = 0;
     }
     SHARED->state = SETTINGS->numThreads;
+#ifdef LINUX
     cond_broadcast(&SHARED->goCondVar);
+#endif
+#ifdef WINDOWS
+    for (int i = 0; i < SETTINGS->numThreads; i++)
+        event_signal(&THREADS[i]->goEvent);
+#endif
 }
 
 static void wait_for_go(void)
 {
+#ifdef LINUX
     cond_wait(&SHARED->goCondVar, &SHARED->mutex);
+#endif
+#ifdef WINDOWS
+    event_wait(&INFO->goEvent, &SHARED->mutex);
+    mutex_lock(&SHARED->mutex);
+#endif
 }
 
 static void wait_for_stop(void)
@@ -1168,6 +1173,7 @@ static void emergency_stop(void)
     log("warning: threads crashed or deadlocked; initiating emergency reset\n");
     reset(SETTINGS->numThreads, SETTINGS->syzygyProbeDepth, SETTINGS->hashSize, 
         SyzygyPath);
+    mutex_lock(&SHARED->mutex);
     if (!go)
         return;
     char line[32], moveStr[16];
@@ -4094,8 +4100,7 @@ check_hash:
         }
     }
 
-    if (hash_depth < 0 && depth >= SETTINGS->syzygyProbeDepth &&
-            TB_LARGEST > 0 && popcount(PieceAll) <= TB_LARGEST)
+    if (hash_depth < 0 && TB_LARGEST > 0 && popcount(PieceAll) <= TB_LARGEST)
     {
         unsigned res = tb_probe_wdl(Piece(White), Piece(Black),
             King(White) | King(Black),
@@ -4617,7 +4622,8 @@ set_jump:
     memcpy(SaveBoard,Board,sizeof(GBoard));
     memcpy(SaveData,Data,sizeof(GData));
     save_sp = sp;
-    for (depth = start_depth; depth < SHARED->depthLimit; depth += 2)
+    for (depth = start_depth; depth < SHARED->depthLimit && depth < 256;
+            depth += 2)
     {
         INFO->depth = depth;
         uint32_t sched =
@@ -4771,7 +4777,7 @@ static void send_pv(const int *PV, size_t nodes, size_t tbHits, int depth,
 
     size_t nps = (nodes * 1000) / elapsedTime;
 
-    char pvStr[BUFSIZ];
+    char pvStr[IOSIZE];
     unsigned pvPos = 0;
     for (unsigned i = 0; i < MAX_PV_LEN && PV[i] != 0; i++)
     {
@@ -4798,9 +4804,10 @@ static void send_pv(const int *PV, size_t nodes, size_t tbHits, int depth,
     }
     pvStr[pvPos++] = '\0';
 
-    char line[BUFSIZ];
+    char line[IOSIZE];
     int len = snprintf(line, sizeof(line)-1, "info depth %d seldepth %d score "
-        "%s %d multipv 1 nodes %zu nps %zu tbhits %zu time %ld pv%s\n",
+        "%s %d multipv 1 nodes %" SIZE_T " nps %" SIZE_T " tbhits %" SIZE_T
+        " time %ld pv%s\n",
         depth/2, selDepth/2, scoreType, bestScore, nodes, nps, tbHits,
         currTime - startTime, pvStr);
     if (len < 0 || len >= sizeof(line)-1)
@@ -4818,7 +4825,7 @@ static void send_curr_move(int move, int cnt)
             currTime - InfoTime <= InfoDelay)
         return;
     InfoTime = currTime;
-    char moveStr[16], line[BUFSIZ];
+    char moveStr[16], line[IOSIZE];
     move_to_string(move, moveStr);
     int len = snprintf(line, sizeof(line)-1, 
         "info currmove %s currmovenumber %d\n", moveStr, cnt);
@@ -4861,12 +4868,12 @@ static void send_best_move(const int *PV, size_t nodes, size_t tbHits,
     else
         scoreType = "cp";
 
-    char line[BUFSIZ];
+    char line[IOSIZE];
     uint64_t time = stopTime - startTime;
     uint64_t nps = (nodes / Max(time / 1000, 1));
-    int len = snprintf(line, sizeof(line)-1, "info nodes %zu tbhits %zu "
-        "time %ld nps %ld score %s %d\n", nodes, tbHits, time, nps, scoreType,
-        bestScore);
+    int len = snprintf(line, sizeof(line)-1, "info nodes %" SIZE_T
+        " tbhits %" SIZE_T " time %ld nps %ld score %s %d\n", nodes, tbHits,
+        time, nps, scoreType, bestScore);
     if (len > 0 && len < sizeof(line)-1)
         put_line(line, len);
 
@@ -4900,7 +4907,7 @@ static inline int64_t get_number(const char *token)
 
 void uci(void)
 {
-    char line[4 * BUFSIZ];
+    char line[4 * IOSIZE];
     uint64_t currTime = get_time();
 
     mutex_lock(&SHARED->mutex);
@@ -4917,12 +4924,9 @@ void uci(void)
             currTime = get_time();
 
             if (mutex_lock(&SHARED->mutex, 500))
-            {
                 emergency_stop();
-                mutex_lock(&SHARED->mutex);
-            }
             if (SHARED->state != STOPPED &&
-                    currTime >= SHARED->startTime + SHARED->hardTimeLimit)
+                    currTime >= SHARED->startTime + SHARED->hardTimeLimit / 2)
             {
                 stop();
                 wait_for_stop();
@@ -5046,15 +5050,16 @@ void uci(void)
             else
                 goto bad_command;
             token = strtok_r(moves, " ", &saveptr);
-            if (token == NULL || strcmp(token, "moves") != 0)
-                goto bad_command;
-            while ((token = strtok_r(NULL, " ", &saveptr)) != NULL)
+            if (token != NULL && strcmp(token, "moves") == 0)
             {
-                int move = move_from_string(token);
-                if (Current->turn) do_move<1>(move); else do_move<0>(move);
-                memcpy(Data, Current, sizeof(GData));
-                Current = Data;
-                SHARED->rootDepth++;
+                while ((token = strtok_r(NULL, " ", &saveptr)) != NULL)
+                {
+                    int move = move_from_string(token);
+                    if (Current->turn) do_move<1>(move); else do_move<0>(move);
+                    memcpy(Data, Current, sizeof(GData));
+                    Current = Data;
+                    SHARED->rootDepth++;
+                }
             }
             memcpy(Stack, Stack + sp - Current->ply,
                 (Current->ply + 1) * sizeof(uint64_t));
@@ -5094,6 +5099,7 @@ void uci(void)
             else
                 goto bad_command;
             reset(numThreads, syzygyProbeDepth, hashSize, SyzygyPath);
+            mutex_lock(&SHARED->mutex);
         }
         else if (strcmp(token, "ucinewgame") == 0)
         {
@@ -5112,7 +5118,7 @@ void uci(void)
                 "option name Threads type spin min 1 max 64 default 4\n"
                 "option name SyzygyPath type string default <empty>\n"
                 "option name SyzygyProbeDepth type spin min 0 max 64 "
-                    "default 6\n"
+                    "default 1\n"
                 "uciok\n";
             put_line(reply, sizeof(reply)-1);
         }
@@ -5174,7 +5180,8 @@ int main(int argc, char **argv)
                 continue;
             }
             char infoName[256] = {0};
-            init_object_name(infoName, sizeof(infoName)-1, "INFO", i);
+            init_object_name(infoName, sizeof(infoName)-1, "INFO",
+                SETTINGS->parentPid, i);
             THREADS[i] = (GThreadInfo *)init_object(infoName,
                 sizeof(GThreadInfo), NULL, false, false, true, NULL);
         }
@@ -5184,7 +5191,14 @@ int main(int argc, char **argv)
         mutex_lock(&SHARED->mutex);
         SHARED->init--;
         if (SHARED->init == 0)
+        {
+#ifdef LINUX
             cond_signal(&SHARED->initCondVar);
+#endif
+#ifdef WINDOWS
+            event_signal(&SHARED->initEvent);
+#endif
+        }
         mutex_unlock(&SHARED->mutex);
 
         worker();   // Wait for work from parent.
@@ -5202,7 +5216,9 @@ int main(int argc, char **argv)
         init_object(NULL, sizeof(GSharedInfo), SHARED, true, false, true,
             NULL);
         mutex_init(&SHARED->mutex);
+#ifdef LINUX
         cond_init(&SHARED->goCondVar);
+#endif
         init_object(NULL, SETTINGS->hashSize, HASH, true, false, true, NULL);
         init_object(NULL, pvHashSize, PVHASH, true, false, true, NULL);
         init_object(NULL, pawnHashSize, PAWNHASH, true, false, true, NULL);
@@ -5233,11 +5249,12 @@ int main(int argc, char **argv)
 
     // PARENT:
     printf("LazyGull\n");
+    init_os();
 
     // Read override parameters from the environment (useful for debugging)
     unsigned numThreads = get_num_cpus();
     size_t hashSize = 128 * (1 << 20);     // 128MB
-    size_t syzygyProbeDepth = 6;
+    size_t syzygyProbeDepth = 1;
     SyzygyPath[0] = '\0';
     const char *val;
     if ((val = getenv("GULL_HASH")) != NULL)
@@ -5271,63 +5288,73 @@ static void create_children(size_t numThreads, size_t syzygyProbeDepth,
     hashSize = Min(maxHashSize, hashSize);
     numThreads = Min(maxNumThreads, numThreads);
     syzygyProbeDepth = Min(maxSyzygyProbeDepth, syzygyProbeDepth);
+    unsigned pid = get_pid();
 
-    log("settings: numThreads=%zu, hashSize=%zu, "
-            "syzygyProbeDepth=%zu, syzygyPath=\"%s\"\n",
+    log("settings: numThreads=%" SIZE_T ", hashSize=%" SIZE_T ", "
+            "syzygyProbeDepth=%" SIZE_T ", syzygyPath=\"%s\"\n",
             numThreads, hashSize, syzygyProbeDepth, tbPath);
 
     // Create shared objects:
     char dataName[256] = {0};
-    init_object_name(dataName, sizeof(dataName)-1, "DATA", 0);
+    init_object_name(dataName, sizeof(dataName)-1, "DATA", pid, 0);
     init_object(dataName, sizeof(GGlobalData), DATA, true, false, true, NULL);
     init_data();
 
     char settingsName[256] = {0};
-    init_object_name(settingsName, sizeof(settingsName)-1, "SETTINGS", 0);
+    init_object_name(settingsName, sizeof(settingsName)-1, "SETTINGS", pid, 0);
     GSettings settings;
     settings.numThreads = numThreads;
     settings.syzygyProbeDepth = syzygyProbeDepth;
     settings.hashSize = hashSize;
+    settings.parentPid = pid;
     init_object(settingsName, sizeof(settings), SETTINGS, true, true, true,
         &settings);
 
     char hashName[256] = {0};
-    init_object_name(hashName, sizeof(hashName)-1, "HASH", 0);
+    init_object_name(hashName, sizeof(hashName)-1, "HASH", pid, 0);
     init_object(hashName, hashSize, HASH, true, false, true, NULL);
 
     char pvHashName[256] = {0};
-    init_object_name(pvHashName, sizeof(pvHashName)-1, "PVHASH", 0);
+    init_object_name(pvHashName, sizeof(pvHashName)-1, "PVHASH", pid, 0);
     init_object(pvHashName, pvHashSize, PVHASH, true, false, true, NULL);
 
     char pawnHashName[256] = {0};
-    init_object_name(pawnHashName, sizeof(pawnHashName)-1, "PAWNHASH", 0);
+    init_object_name(pawnHashName, sizeof(pawnHashName)-1, "PAWNHASH", pid, 0);
     init_object(pawnHashName, pawnHashSize, PAWNHASH, true, false, true,
         NULL);
 
     char sharedName[256] = {0};
-    init_object_name(sharedName, sizeof(sharedName)-1, "SHARED", 0);
+    init_object_name(sharedName, sizeof(sharedName)-1, "SHARED", pid, 0);
     init_object(sharedName, sizeof(GSharedInfo), SHARED, true, false, true,
         NULL);
     SHARED->init = numThreads;
     mutex_init(&SHARED->mutex);
+#ifdef LINUX
     cond_init(&SHARED->goCondVar);
     cond_init(&SHARED->initCondVar);
+#endif
+#ifdef WINDOWS
+    event_init(&SHARED->initEvent);
+#endif
 
     // Create children: 
     for (size_t i = 0; i < numThreads; i++)
     {
         char infoName[256] = {0};
-        init_object_name(infoName, sizeof(infoName)-1, "INFO", i);
+        init_object_name(infoName, sizeof(infoName)-1, "INFO", pid, i);
         THREADS[i] = (GThreadInfo *)init_object(infoName, sizeof(GThreadInfo),
             NULL, true, false, true, NULL);
         THREADS[i]->stop = true;
         THREADS[i]->newGame = true;
         THREADS[i]->id = (unsigned)i;
+#ifdef WINDOWS
+        event_init(&THREADS[i]->goEvent);
+#endif
     }
     for (size_t i = 0; i < numThreads; i++)
     {
         char infoName[256] = {0};
-        init_object_name(infoName, sizeof(infoName)-1, "INFO", i);
+        init_object_name(infoName, sizeof(infoName)-1, "INFO", pid, i);
         create_child(hashName, pvHashName, pawnHashName, dataName,
             settingsName, sharedName, infoName, tbPath);
     }
@@ -5338,7 +5365,15 @@ static void create_children(size_t numThreads, size_t syzygyProbeDepth,
     // Wait for threads to finish initializing:
     mutex_lock(&SHARED->mutex);
     while (SHARED->init != 0)
+    {
+#ifdef LINUX
         cond_wait(&SHARED->initCondVar, &SHARED->mutex);
+#endif
+#ifdef WINDOWS
+        event_wait(&SHARED->initEvent, &SHARED->mutex);
+        mutex_lock(&SHARED->mutex);
+#endif
+    }
     mutex_unlock(&SHARED->mutex);
 
     // Cleanup:
@@ -5351,7 +5386,7 @@ static void create_children(size_t numThreads, size_t syzygyProbeDepth,
     for (size_t i = 0; i < numThreads; i++)
     {
         char infoName[256] = {0};
-        init_object_name(infoName, sizeof(infoName)-1, "INFO", i);
+        init_object_name(infoName, sizeof(infoName)-1, "INFO", pid, i);
         remove_object(infoName);
     }
 }
@@ -5364,12 +5399,24 @@ static void nuke_children(void)
     for (size_t i = 0; i < SETTINGS->numThreads; i++)
         nuke_child(THREADS[i]->pid);
     delete_object(HASH, SETTINGS->hashSize);
+    delete_object(PVHASH, pvHashSize);
     delete_object(PAWNHASH, pawnHashSize);
+    mutex_free(&SHARED->mutex);
+#ifdef LINUX
+    cond_free(&SHARED->goCondVar);
+    cond_free(&SHARED->initCondVar);
+#endif
     for (size_t i = 0; i < SETTINGS->numThreads; i++)
+    {
+#ifdef WINDOWS
+        event_free(&THREADS[i]->goEvent);
+#endif
         delete_object(THREADS[i], sizeof(GThreadInfo));
+    }
     delete_object(DATA, sizeof(GGlobalData));
     delete_object(SETTINGS, sizeof(GSettings));
     delete_object(SHARED, sizeof(GSharedInfo));
+    delete_object(INFO, sizeof(GThreadInfo));
 }
 
 /*
