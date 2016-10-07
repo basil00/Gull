@@ -1,0 +1,75 @@
+CC=x86_64-w64-mingw32-g++
+
+ifeq ($(ARCH),)
+	ARCH=x86-64
+endif
+
+CFLAGS=-fno-exceptions -fno-rtti -Wno-parentheses -D_WIN32_WINNT=0x0601
+ifeq ($(ARCH),x86-64)
+    CFLAGS += -msse4.1 -mpopcnt -D GULL_MAGIC_BITBOARDS
+endif
+
+ifeq ($(ARCH),x86-64-bmi2)
+    CFLAGS += -msse4.2 -mpopcnt -mavx2 -mbmi -mbmi2 -D GULL_PDEP_BITBOARDS
+endif
+
+STRIP=x86_64-w64-mingw32-strip
+
+help:
+	@echo 
+	@echo "To build LazyGull, run:"
+	@echo
+	@echo "    make -f Makefile.windows TARGET [ARCH=arch]"
+	@echo
+	@echo "Where:"
+	@echo
+	@echo "    TARGET=build"
+	@echo "        Standard build."
+	@echo "    TARGET=pgo-build"
+	@echo "        Profile Guided Optimization (PGO) build."
+	@echo "    TARGET=debug"
+	@echo "        Debug build."
+	@echo
+	@echo "    ARCH=x86-64"
+	@echo "        Standard x86-64 (with popcnt and SSE4.1 support). [DEFAULT]"
+	@echo "    ARCH=x86-64-bmi2"
+	@echo "        Modern x86-64 (with popcnt, SSE4.2, BMI, BMI2, AVX2"\
+		"support)."
+	@echo
+	@echo "To do a basic build, simply run:"
+	@echo
+	@echo "    make -f Makefile.windows build"
+	@echo
+
+build: tbprobe.c
+	$(CC) $(CFLAGS) -O3 -D WINDOWS Gull.cpp tbprobe.c -o LazyGull.exe
+	$(STRIP) LazyGull.exe
+
+pgo-build: tbprobe.c
+	rm -f *.gcda
+	$(CC) $(CFLAGS) -O3 -fprofile-generate -D WINDOWS Gull.cpp tbprobe.c -o \
+        LazyGull.exe
+	LazyGull.exe bench \
+		"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+	$(CC) $(CFLAGS) -O3 -fprofile-use -fno-peel-loops -fno-tracer -D WINDOWS \
+        Gull.cpp tbprobe.c -o LazyGull.exe
+	$(STRIP) LazyGull.exe
+
+debug: tbprobe.c
+	$(CC) $(CFLAGS) -O0 -g -D WINDOWS Gull.cpp tbprobe.c -o LazyGull.exe
+
+tbprobe.c: Fathom-master.zip
+	unzip -o -j Fathom-master.zip "Fathom-master/src/tbprobe.h" -d "./"
+	unzip -o -j Fathom-master.zip "Fathom-master/src/tbprobe.c" -d "./"
+
+tbcore.c: Fathom-master.zip
+	unzip -o -j Fathom-master.zip "Fathom-master/src/tbcore.h" -d "./"
+	unzip -o -j Fathom-master.zip "Fathom-master/src/tbcore.c" -d "./"
+
+Fathom-master.zip:
+	wget https://github.com/basil00/Fathom/archive/master.zip \
+        -O Fathom-master.zip
+
+clean:
+	rm -f LazyGull.exe tbprobe.o
+
