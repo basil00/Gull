@@ -50,7 +50,15 @@ pgo-build: tbprobe.c
 	$(CC) $(CFLAGS) -O3 -fprofile-generate -D WINDOWS Gull.cpp tbprobe.c -o \
         LazyGull.exe
 	LazyGull.exe bench \
-		"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+		"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" \
+		"r1bq1rk1/4bppp/p2p1n2/npp1p3/3PP3/2P2N1P/PPB2PP1/RNBQR1K1 b - d3 0 11" \
+		"rnbqkb1r/1p3ppp/p2ppn2/6B1/3NPP2/2N5/PPP3PP/R2QKB1R b KQkq f3 0 7" \
+		"r1r3k1/1p1n1pp1/2p1pqn1/p2p3p/N2PPP2/3P2P1/PPR2QPN/5RK1 b - - 3 22" \
+		"r6r/p1pq2k1/b2p4/P1pP1pp1/2P1p3/2P1P1P1/Q4P2/1R2RBK1 w - - 4 30" \
+		"1r2kb1r/pp1b2pp/4pq2/4np2/2p2B2/2N3P1/PPQ1PPBP/3R1RK1 b k - 1 15" \
+		"2rr2k1/p1q2p1p/1p4pB/1B1bb3/P7/2P2QP1/1P2RP2/4R1K1 w - - 10 28" \
+		"R7/3kqp2/3n3Q/2pPp2P/2P1P3/1r4P1/8/7K b - - 0 52" \
+		"8/2p5/p3k3/2p1b2p/P2pK2p/1P1P3P/3B2P1/8 b - - 4 77"
 	$(CC) $(CFLAGS) -O3 -fprofile-use -fno-peel-loops -fno-tracer -D WINDOWS \
         Gull.cpp tbprobe.c -o LazyGull.exe
 	$(STRIP) LazyGull.exe

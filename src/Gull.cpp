@@ -5230,7 +5230,7 @@ int main(int argc, char **argv)
         uint64_t t0 = get_time();
         for (int i = 2; i < argc; i++)
         {
-            init_search(false);
+            init_search(true);
             get_board(argv[i]);
             INFO->stop = false;
             SHARED->depthLimit = 2 * benchDepth + 2;
