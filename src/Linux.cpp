@@ -171,7 +171,9 @@ void create_child(const char *hashName, const char *pvHashName,
         error("failed to fork: %s", strerror(errno));
     if (pid != 0)
         return;
+#ifndef MACOSX
     prctl(PR_SET_PDEATHSIG, SIGHUP);
+#endif
     char exe[PATH_MAX];
     ssize_t len = readlink("/proc/self/exe", exe, sizeof(exe)-1);
     if (len < 0)
@@ -383,6 +385,20 @@ static void put_line(char *line, unsigned linelen)
  */
 static void init_os(void)
 {
-    // NOP.
+    int fds[2];
+    if (pipe2(fds, O_CLOEXEC) != 0)
+        return;
+    pid_t pid = getpid();
+    if (fork() == 0)
+    {
+#ifndef MACOSX
+        prctl(PR_SET_PDEATHSIG, SIGHUP);
+#endif
+        close(fds[1]);
+        char c;
+        int r = read(fds[0], &c, sizeof(c));
+        kill(-pid, SIGKILL);
+    }
+    close(fds[0]);
 }
 
