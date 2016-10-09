@@ -36,15 +36,6 @@ typedef HANDLE GEvent;
 
 #define strtok_r        strtok_s
 #define SIZE_T          "Iu"
-
-#define INFO            ((GThreadInfo *)0x51010000)
-#define SETTINGS        ((GSettings *)  0x51000000)
-#define SHARED          ((GSharedInfo *)0x51020000)
-#define DATA            ((GGlobalData *)0x50000000)
-#define PAWNHASH        ((GPawnEntry *) 0x54000000)
-#define PVHASH          ((GPVEntry *)   0x58000000)
-#define HASH            ((GEntry *)     0x81230000)
-
 #define IOSIZE          4096
 
 #endif

@@ -36,6 +36,9 @@
 
 #include "data.h"
 
+#define STRING2(x)  #x
+#define STRING(x)   STRING2(x)
+
 #define Convert(x,type) ((type)(x))
 
 #define Abs(x) ((x) > 0 ? (x) : (-(x)))
@@ -874,6 +877,18 @@ static const uint32_t Schedule[] =
     0x00C3C3C3,
     0x00878787
 };
+
+extern GThreadInfo INFO[];
+extern GSettings   SETTINGS[];
+extern GSharedInfo SHARED[];
+extern GGlobalData DATA[];
+extern GPawnEntry  PAWNHASH[];
+extern GPVEntry    PVHASH[];
+#ifndef WINDOWS
+extern GEntry      HASH[];
+#else
+#define HASH        ((GEntry *)0x8000000)
+#endif
 
 jmp_buf CheckJump;
 
@@ -5112,7 +5127,7 @@ void uci(void)
         else if (strcmp(token, "uci") == 0)
         {
             char reply[] =
-                "id name LazyGull\n"
+                "id name LazyGull (" STRING(VERSION) ")\n"
                 "id author ThinkingALot\n"
                 "option name Hash type spin min 1 max 8388608 default 128\n"
                 "option name Threads type spin min 1 max 64 default 4\n"
@@ -5143,6 +5158,8 @@ int main(int argc, char **argv)
         {
             usage:
             fprintf(stderr, "usage: %s\n", argv[0]);
+            fprintf(stderr, "       %s \"bench\" <depth> FEN1 [FEN2 ...]\n",
+                argv[0]);
             exit(EXIT_FAILURE);
         }
 
@@ -5203,8 +5220,9 @@ int main(int argc, char **argv)
 
         worker();   // Wait for work from parent.
     }
-    else if (argc > 1 && strcmp(argv[1], "bench") == 0)
+    else if (argc > 2 && strcmp(argv[1], "bench") == 0)
     {
+        const int benchDepth = atoi(argv[2]);
         init_object(NULL, sizeof(GGlobalData), DATA, true, false, true, NULL);
         init_data();
         GSettings settings;
@@ -5226,9 +5244,8 @@ int main(int argc, char **argv)
         INFO->pid = get_pid();
         THREADS[0] = INFO;
 
-        const int benchDepth = 14;
-        uint64_t t0 = get_time();
-        for (int i = 2; i < argc; i++)
+        uint64_t t0 = get_time(), nodes = 0;
+        for (int i = 3; i < argc; i++)
         {
             init_search(true);
             get_board(argv[i]);
@@ -5239,16 +5256,18 @@ int main(int argc, char **argv)
             SHARED->startTime = t0;
             if (Current->turn == White) root<0>(); else root<1>();
             send_best_move();
+            nodes += INFO->nodes;
         }
         uint64_t t1 = get_time();
-        printf("TIME: %ldms\n", t1 - t0);
+        printf("TIME : %ldms\n", t1 - t0);
+        printf("NODES: %lu\n", nodes);
         exit(EXIT_SUCCESS);
     }
     else if (argc > 1)
         goto usage;
 
     // PARENT:
-    printf("LazyGull\n");
+    printf("LazyGull (" STRING(VERSION) ")\n");
     init_os();
 
     // Read override parameters from the environment (useful for debugging)
@@ -5257,13 +5276,13 @@ int main(int argc, char **argv)
     size_t syzygyProbeDepth = 1;
     SyzygyPath[0] = '\0';
     const char *val;
-    if ((val = getenv("GULL_HASH")) != NULL)
+    if ((val = getenv("LAZYGULL_HASH")) != NULL)
         hashSize = HASH_SIZE((size_t)atoi(val));
-    if ((val = getenv("GULL_THREADS")) != NULL)
+    if ((val = getenv("LAZYGULL_THREADS")) != NULL)
         numThreads = atoi(val);
-    if ((val = getenv("GULL_SYZYGY_PATH")) != NULL)
+    if ((val = getenv("LAZYGULL_SYZYGY_PATH")) != NULL)
         strncpy(SyzygyPath, val, sizeof(SyzygyPath)-1);
-    if ((val = getenv("GULL_SYZYGY_PROBE_DEPTH")) != NULL)
+    if ((val = getenv("LAZYGULL_SYZYGY_PROBE_DEPTH")) != NULL)
         syzygyProbeDepth = atoi(val);
 
     PVN = 1;        // XXX NYI

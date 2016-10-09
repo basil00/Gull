@@ -60,6 +60,8 @@
 
 #include "data.h"
 
+extern GGlobalData DATA[];
+
 /*
  * If you are integrating tbprobe into an engine, you can replace some of
  * tbprobe's built-in functionality with that already provided by the engine.

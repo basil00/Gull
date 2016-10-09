@@ -398,6 +398,7 @@ static void init_os(void)
         char c;
         int r = read(fds[0], &c, sizeof(c));
         kill(-pid, SIGKILL);
+        error("failed to kill children: %s", strerror(errno));
     }
     close(fds[0]);
 }
