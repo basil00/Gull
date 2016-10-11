@@ -33,8 +33,9 @@
 #include <popcntintrin.h>
 #include <x86intrin.h>
 
-#define UINT64_MAX  0xFFFFFFFFFFFFFFFFull       // XXX
+#define UINT64_MAX  0xFFFFFFFFFFFFFFFFull
 #define UINT32_MAX  0xFFFFFFFF
+#define UINT8_MAX   0xFF
 
 #define builtin_cpuid(f, ax, bx, cx, dx)    \
     __asm__ __volatile__ ("cpuid" : "=a" (ax), "=b" (bx), "=c" (cx), \

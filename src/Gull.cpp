@@ -449,9 +449,8 @@ int64_t hash_size = initial_hash_size;
 uint64_t hash_mask = (initial_hash_size - 4);
 
 typedef struct {
-    uint64_t key;
-    int16_t shelter[2];
-    uint8_t passer[2], draw[2];
+    uint64_t key:48;
+    uint8_t shelter[2], passer[2], draw[2];
     int score;
 } GPawnEntry;
 #define pawn_hash_size (1024 * 1024)
@@ -1220,6 +1219,7 @@ void init_search(int clear_hash) {
         SHARED->date = 1;
         memset(HASH,0,SETTINGS->hashSize);
         memset(PVHASH,0,pvHashSize);
+        memset(PAWNHASH,0,pawnHashSize);
     }
     hash_size = SETTINGS->hashSize / sizeof(GEntry);
     assert((hash_size & (hash_size - 1)) == 0);
@@ -1983,7 +1983,8 @@ template <bool me> inline void eval_pawns(GPawnEntry * PawnEntry, GPawnEvalInfo 
             if (!(Pawn(me) & DATA->File[file])) shelter += Sa(StormHof, StormOfValue);
         }
     }
-    PawnEntry->shelter[me] = shelter;
+    PawnEntry->shelter[me] = (shelter > UINT8_MAX? UINT8_MAX: shelter);
+    PawnEntry->passer[me] = 0;
 
     uint64_t b;
     int min_file = 7, max_file = 0;
@@ -2064,7 +2065,7 @@ template <bool me> inline void eval_pawns(GPawnEntry * PawnEntry, GPawnEvalInfo 
 void eval_pawn_structure(GPawnEntry * PawnEntry) {
     GPawnEvalInfo PEI;
     for (int i = 0; i < sizeof(GPawnEntry) / sizeof(int); i++) *(((int*)PawnEntry) + i) = 0;
-    PawnEntry->key = Current->pawn_key;
+    PawnEntry->key = (Current->pawn_key >> 16);
 
     PEI.patt_w = ShiftW(White, Pawn(White)) | ShiftE(White, Pawn(White));
     PEI.patt_b = ShiftW(Black, Pawn(Black)) | ShiftE(Black, Pawn(Black));
@@ -2265,7 +2266,10 @@ template <bool me> inline void eval_king(GEvalInfo &EI) {
 template <bool me> inline void eval_passer(GEvalInfo &EI) {
     for (uint64_t u = EI.PawnEntry->passer[me]; T(u); Cut(u)) {
         int file = lsb(u);
-        int sq = NB(opp, DATA->File[file] & Pawn(me));
+        uint64_t passer = DATA->File[file] & Pawn(me);
+        if (passer == 0)
+            continue;
+        int sq = NB(opp, passer);
         int rank = CRank(me, sq);
         Current->passer |= Bit(sq);
         if (rank <= 2) continue;
@@ -2482,7 +2486,7 @@ void evaluation() {
 #undef me
 
     EI.PawnEntry = PAWNHASH + (Current->pawn_key & pawn_hash_mask);
-    if (Current->pawn_key != EI.PawnEntry->key) eval_pawn_structure(EI.PawnEntry);
+    if ((Current->pawn_key >> 16) != EI.PawnEntry->key) eval_pawn_structure(EI.PawnEntry);
     EI.score += EI.PawnEntry->score;
 
     eval_king<White>(EI);

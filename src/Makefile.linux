@@ -9,7 +9,7 @@ ifeq ($(ARCH),)
 endif
 
 DATE=$(shell date +%y%m%d)
-CFLAGS=-fno-exceptions -fno-rtti -Wno-parentheses -pthread 
+CFLAGS=-fno-exceptions -fno-rtti -fno-stack-protector -Wno-parentheses -pthread 
 ifeq ($(ARCH),x86-64)
     CFLAGS += -msse4.1 -mpopcnt -D GULL_MAGIC_BITBOARDS
     VERSION = $(DATE)-Linux-x86_64
@@ -24,10 +24,10 @@ LDFLAGS=-lrt \
     -Wl,--defsym=INFO=0x300000 \
     -Wl,--defsym=SETTINGS=0x301000 \
     -Wl,--defsym=SHARED=0x302000 \
-    -Wl,--defsym=DATA=0x8000000 \
-    -Wl,--defsym=PAWNHASH=0x10000000 \
-    -Wl,--defsym=PVHASH=0x20000000 \
-    -Wl,--defsym=HASH=0x40000000
+    -Wl,--defsym=DATA=0x74000000 \
+    -Wl,--defsym=PAWNHASH=0x78000000 \
+    -Wl,--defsym=PVHASH=0x7B000000 \
+    -Wl,--defsym=HASH=0x7F000000
 STRIP=strip
 
 help:

@@ -44,6 +44,7 @@
 
 #define UINT64_MAX  0xFFFFFFFFFFFFFFFFull       // XXX
 #define UINT32_MAX  0xFFFFFFFF
+#define UINT8_MAX   0xFF
 
 #ifdef MACOSX   // MacOSX:
 #include <mach/mach_time.h>
@@ -123,7 +124,7 @@ void *init_object(const char *object, size_t size, void *addr,
         int prot = PROT_READ | (readonly && value == NULL? 0: PROT_WRITE);
         flags |= (addr == NULL? 0: MAP_FIXED);
         void *ptr = mmap(addr, SIZE(size), prot, flags, fd, 0);
-        if (ptr == MAP_FAILED)
+        if (ptr == MAP_FAILED || (addr != NULL && ptr != addr))
             error("failed to map object %s: %s", object, strerror(errno));
         if (value != NULL)
         {
