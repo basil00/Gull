@@ -6,7 +6,8 @@ LazyGull implements the following new features:
 
 * Syzygy Tablebase support;
 * LazySMP implementation;
-* PDEP Bitboards for modern CPUs; and
+* PDEP Bitboards for modern CPUs;
+* Bug fixes; and
 * Portable to Windows, Linux and MacOSX.
 
 To build simply run the following commands in the `src` directory:

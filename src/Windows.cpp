@@ -22,10 +22,12 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#define _POSIX_
 #include <assert.h>
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <math.h>
 #include <windows.h>
 
@@ -315,7 +317,7 @@ static void event_init(GEvent *event)
     memset(&attr, 0, sizeof(attr));
     attr.nLength = sizeof(attr);
     attr.bInheritHandle = TRUE;
-    *event = CreateEvent(&attr, FALSE, FALSE, NULL);
+    *event = CreateEvent(&attr, TRUE, FALSE, NULL);
     if (*event == NULL)
         error("failed to create event (%d)", GetLastError());
 }
@@ -323,6 +325,7 @@ static void event_init(GEvent *event)
 static void event_signal(GEvent *event)
 {
     SetEvent(*event);
+    ResetEvent(*event);
 }
 
 static void event_wait(GEvent *event, GMutex *mutex)
@@ -330,6 +333,7 @@ static void event_wait(GEvent *event, GMutex *mutex)
     if (SignalObjectAndWait(*mutex, *event, INFINITE, FALSE) !=
             WAIT_OBJECT_0)
         error("failed to wait for event (%d)", GetLastError());
+    mutex_lock(mutex);
 }
 
 static void event_free(GEvent *event)
@@ -482,15 +486,16 @@ static bool get_line(char *line, unsigned linelen, uint64_t timeout)
  */
 static void put_line(char *line, unsigned linelen)
 {
-    unsigned ptr = 0;
-    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
-    while (ptr < linelen)
+    if (linelen > _POSIX_PIPE_BUF)
     {
-        DWORD len;
-        if (!WriteFile(handle, line + ptr, linelen - ptr, &len, NULL))
-            error("failed to write output (%d)", GetLastError());
-        ptr += (unsigned)len;
+        log("warning: output \"%s\" too long (max is %u, got %u)\n", line,
+            PIPE_BUF, linelen);
+        return;
     }
+    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD len;
+    if (!WriteFile(handle, line, linelen, &len, NULL) || len != linelen)
+        error("failed to write output (%d)", GetLastError());
     FlushFileBuffers(handle);
 }
 

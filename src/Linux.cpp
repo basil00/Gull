@@ -1,6 +1,6 @@
 /*
  * Linux.cpp
- * Copyright (c) 2015 the copyright holders
+ * Copyright (c) 2016 the copyright holders
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,6 +23,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <setjmp.h>
 #include <signal.h>
@@ -369,16 +370,21 @@ static bool get_line(char *line, unsigned linelen, uint64_t timeout)
  */
 static void put_line(char *line, unsigned linelen)
 {
-    unsigned ptr = 0; 
-    while (ptr < linelen)
+    if (linelen > PIPE_BUF)
     {
-        int res = write(STDOUT_FILENO, line + ptr, linelen - ptr);
-        if (res < 0 && errno == EINTR)
-            continue;
-        if (res < 0)
-            error("failed to write output: %s", strerror(errno));
-        ptr += (unsigned)res;
+        log("warning: output \"%s\" too long (max is %u, got %u)\n", line,
+            PIPE_BUF, linelen);
+        return;
     }
+
+    int res;
+    do
+    {
+        res = write(STDOUT_FILENO, line, linelen);
+    }
+    while (res < 0 && (errno == EINTR || errno == EAGAIN));
+    if (res != linelen)
+        error("failed to write output: %s", strerror(errno));
 }
 
 /*

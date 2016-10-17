@@ -1,6 +1,6 @@
 /*
  * Windows.h
- * Copyright (c) 2015 the copyright holders
+ * Copyright (c) 2016 the copyright holders
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,6 +23,8 @@
 
 #ifndef LINUX_H
 #define LINUX_H
+
+#define _POSIX_
 
 #include <stdlib.h>
 #include <setjmp.h>

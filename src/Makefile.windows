@@ -59,7 +59,7 @@ pgo-build: tbprobe.c
 	rm -f *.gcda
 	$(CC) $(CFLAGS) -O3 -fprofile-generate -D WINDOWS Gull.cpp tbprobe.c \
 		$(LDFLAGS) -o LazyGull.exe
-	./bench.sh LazyGull.exe 11
+	./bench.sh ./LazyGull.exe 11
 	$(CC) $(CFLAGS) -O3 -fprofile-use -fno-peel-loops -fno-tracer -D WINDOWS \
         Gull.cpp tbprobe.c $(LDFLAGS) -o LazyGull.exe
 	$(STRIP) LazyGull.exe
