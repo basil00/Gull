@@ -61,11 +61,11 @@ help:
 	@echo "    make -f Makefile.linux build"
 	@echo
 
-build: tbprobe.c
+build: tb
 	$(CC) $(CFLAGS) -O3 -D LINUX Gull.cpp tbprobe.c $(LDFLAGS) -o LazyGull
 	$(STRIP) LazyGull
 
-pgo-build: tbprobe.c
+pgo-build: tb
 	rm -f *.gcda
 	$(CC) $(CFLAGS) -O3 -fprofile-generate -D LINUX Gull.cpp tbprobe.c \
         $(LDFLAGS) -o LazyGull
@@ -74,14 +74,12 @@ pgo-build: tbprobe.c
         Gull.cpp tbprobe.c $(LDFLAGS) -o LazyGull
 	$(STRIP) LazyGull
 
-debug: tbprobe.c
+debug: tb
 	$(CC) $(CFLAGS) -O0 -g -D LINUX Gull.cpp tbprobe.c $(LDFLAGS) -o LazyGull
 
-tbprobe.c: Fathom-master.zip
+tb: Fathom-master.zip
 	unzip -o -j Fathom-master.zip "Fathom-master/src/tbprobe.h" -d "./"
 	unzip -o -j Fathom-master.zip "Fathom-master/src/tbprobe.c" -d "./"
-
-tbcore.c: Fathom-master.zip
 	unzip -o -j Fathom-master.zip "Fathom-master/src/tbcore.h" -d "./"
 	unzip -o -j Fathom-master.zip "Fathom-master/src/tbcore.c" -d "./"
 

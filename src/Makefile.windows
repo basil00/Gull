@@ -51,11 +51,11 @@ help:
 	@echo "    make -f Makefile.windows build"
 	@echo
 
-build: tbprobe.c
+build: tb
 	$(CC) $(CFLAGS) -O3 -D WINDOWS Gull.cpp tbprobe.c $(LDFLAGS) -o LazyGull.exe
 	$(STRIP) LazyGull.exe
 
-pgo-build: tbprobe.c
+pgo-build: tb
 	rm -f *.gcda
 	$(CC) $(CFLAGS) -O3 -fprofile-generate -D WINDOWS Gull.cpp tbprobe.c \
 		$(LDFLAGS) -o LazyGull.exe
@@ -64,15 +64,13 @@ pgo-build: tbprobe.c
         Gull.cpp tbprobe.c $(LDFLAGS) -o LazyGull.exe
 	$(STRIP) LazyGull.exe
 
-debug: tbprobe.c
+debug: tb
 	$(CC) $(CFLAGS) -O0 -g -D WINDOWS Gull.cpp tbprobe.c $(LDFLAGS) \
 		-o LazyGull.exe
 
-tbprobe.c: Fathom-master.zip
+tb: Fathom-master.zip
 	unzip -o -j Fathom-master.zip "Fathom-master/src/tbprobe.h" -d "./"
 	unzip -o -j Fathom-master.zip "Fathom-master/src/tbprobe.c" -d "./"
-
-tbcore.c: Fathom-master.zip
 	unzip -o -j Fathom-master.zip "Fathom-master/src/tbcore.h" -d "./"
 	unzip -o -j Fathom-master.zip "Fathom-master/src/tbcore.c" -d "./"
 
