@@ -50,8 +50,17 @@
 /* ENGINE INTEGRATION CONFIG                                               */
 /***************************************************************************/
 
-#include <stdint.h>
-#define uint64      unsigned long long
+#ifdef LINUX
+#include "Linux.h"
+#endif
+
+#ifdef WINDOWS
+#include "Windows.h"
+#endif
+
+#include "data.h"
+
+extern GGlobalData DATA[];
 
 /*
  * If you are integrating tbprobe into an engine, you can replace some of
@@ -65,49 +74,27 @@
  * Define TB_KING_ATTACKS(square) to return the king attacks bitboard for a
  * king at `square'.
  */
-extern uint64 SArea[64];
-#define TB_KING_ATTACKS(square)             SArea[(square)]
+//extern uint64 SArea[64];
+#define TB_KING_ATTACKS(square)             DATA->SArea[(square)]
 
 /*
  * Define TB_KNIGHT_ATTACKS(square) to return the knight attacks bitboard for
  * a knight at `square'.
  */
-extern uint64 NAtt[64];
-#define TB_KNIGHT_ATTACKS(square)           NAtt[(square)]
+//extern uint64 NAtt[64];
+#define TB_KNIGHT_ATTACKS(square)           DATA->NAtt[(square)]
 
 /*
  * Define TB_ROOK_ATTACKS(square, occ) to return the rook attacks bitboard
  * for a rook at `square' assuming the given `occ' occupancy bitboard.
  */
-extern const uint64 RMagic[64];
-extern uint64 RMagicMask[64];
-extern const int RShift[64];
-extern uint64 *ROffsetPointer[64];
-#ifndef HNI
-#define TB_ROOK_ATTACKS(square, occ)                                    \
-    (*(ROffsetPointer[(square)] + (((RMagicMask[(square)] & (occ)) *    \
-        RMagic[(square)]) >> RShift[(square)])))
-#else
-#define TB_ROOK_ATTACKS(square, occ)                                    \
-    (*(ROffsetPointer[(square)] + _pext_u64((occ), RMagicMask[(square)])))
-#endif
+#define TB_ROOK_ATTACKS(square, occ)        RookAttacks((square), (occ))
 
 /*
  * Define TB_BISHOP_ATTACKS(square, occ) to return the bishop attacks bitboard
  * for a bishop at `square' assuming the given `occ' occupancy bitboard.
  */
-extern const uint64 BMagic[64];
-extern uint64 BMagicMask[64];
-extern const int BShift[64];
-extern uint64 *BOffsetPointer[64];
-#ifndef HNI
-#define TB_BISHOP_ATTACKS(square, occ)                                  \
-    (*(BOffsetPointer[(square)] + (((BMagicMask[(square)] & (occ)) *    \
-        BMagic[(square)]) >> BShift[(square)])))
-#else
-#define TB_BISHOP_ATTACKS(square, occ)                                  \
-    (*(BOffsetPointer[(square)] + _pext_u64((occ), BMagicMask[(square)])))
-#endif
+#define TB_BISHOP_ATTACKS(square, occ)      BishopAttacks((square), (occ))
 
 /*
  * Define TB_QUEEN_ATTACKS(square, occ) to return the queen attacks bitboard
@@ -115,7 +102,7 @@ extern uint64 *BOffsetPointer[64];
  * NOTE: If no definition is provided then tbprobe will use:
  *       TB_ROOK_ATTACKS(square, occ) | TB_BISHOP_ATTACKS(square, occ)
  */
-#define TB_QUEEN_ATTACKS(square, occ)                                   \
+#define TB_QUEEN_ATTACKS(square, occ)                                       \
     (TB_ROOK_ATTACKS(square, occ) | TB_BISHOP_ATTACKS(square, occ))
 
 /*
@@ -125,9 +112,7 @@ extern uint64 *BOffsetPointer[64];
  *       a white pawn on e1 attacks d2 and f2.  A black pawn on e1 attacks
  *       nothing.  Etc.
  */
-extern uint64 PAtt[2][64];
-#define TB_PAWN_ATTACKS(square, color)      PAtt[!(color)][(square)]
-
-#undef uint64
+//extern uint64 PAtt[2][64];
+#define TB_PAWN_ATTACKS(square, color)      DATA->PAtt[!(color)][(square)]
 
 #endif

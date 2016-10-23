@@ -24,13 +24,21 @@
 #ifndef LINUX_H
 #define LINUX_H
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <setjmp.h>
+#include <pthread.h>
 
 typedef int *GHandle;
 typedef int GProcess;
+typedef pthread_mutex_t GMutex;
+typedef pthread_cond_t GCondVar;
 
 #define __forceinline   inline
 #define __align(x)      __attribute__((aligned(x)))
+
+#define PATH_MAX        4096
+#define SIZE_T          "zu"
+#define IOSIZE          4096
 
 #endif

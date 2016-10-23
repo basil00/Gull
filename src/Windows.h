@@ -1,6 +1,6 @@
 /*
  * Windows.h
- * Copyright (c) 2015 the copyright holders
+ * Copyright (c) 2016 the copyright holders
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,14 +24,20 @@
 #ifndef LINUX_H
 #define LINUX_H
 
+#define _POSIX_
+
 #include <stdlib.h>
 #include <setjmp.h>
 #include <windows.h>
 #include <intrin.h>
 
-typedef HANDLE GHandle;
-typedef HANDLE GProcess;
+typedef HANDLE GMutex;
+typedef HANDLE GEvent;
 
 #define __align(x)      __attribute__((aligned(x)))
+
+#define strtok_r        strtok_s
+#define SIZE_T          "Iu"
+#define IOSIZE          4096
 
 #endif

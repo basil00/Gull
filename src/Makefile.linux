@@ -1,0 +1,94 @@
+ifeq ($(COMP),)
+    CC=g++
+else
+	CC=$(COMP)
+endif
+
+ifeq ($(ARCH),)
+	ARCH=x86-64
+endif
+
+DATE=$(shell date +%y%m%d)
+CFLAGS=-fno-exceptions -fno-rtti -fno-stack-protector -Wno-parentheses -pthread 
+ifeq ($(ARCH),x86-64)
+    CFLAGS += -msse4.1 -mpopcnt -D GULL_MAGIC_BITBOARDS
+    VERSION = $(DATE)-Linux-x86_64
+endif
+
+ifeq ($(ARCH),x86-64-bmi2)
+    CFLAGS += -msse4.2 -mpopcnt -mavx2 -mbmi -mbmi2 -D GULL_PDEP_BITBOARDS
+    VERSION = $(DATE)-Linux-x86_64-bmi2
+endif
+CFLAGS += -DVERSION=$(VERSION)
+LDFLAGS=-lrt \
+    -Wl,--defsym=INFO=0x300000 \
+    -Wl,--defsym=SETTINGS=0x301000 \
+    -Wl,--defsym=SHARED=0x302000 \
+    -Wl,--defsym=DATA=0x74000000 \
+    -Wl,--defsym=PAWNHASH=0x78000000 \
+    -Wl,--defsym=PVHASH=0x7B000000 \
+    -Wl,--defsym=HASH=0x7F000000
+STRIP=strip
+
+help:
+	@echo 
+	@echo "To build LazyGull, run:"
+	@echo
+	@echo "    make -f Makefile.linux TARGET [ARCH=arch] [COMP=compiler]"
+	@echo
+	@echo "Where:"
+	@echo
+	@echo "    TARGET=build"
+	@echo "        Standard build."
+	@echo "    TARGET=pgo-build"
+	@echo "        Profile Guided Optimization (PGO) build."
+	@echo "    TARGET=debug"
+	@echo "        Debug build."
+	@echo
+	@echo "    ARCH=x86-64"
+	@echo "        Standard x86-64 (with popcnt and SSE4.1 support). [DEFAULT]"
+	@echo "    ARCH=x86-64-bmi2"
+	@echo "        Modern x86-64 (with popcnt, SSE4.2, BMI, BMI2, AVX2"\
+		"support)."
+	@echo
+	@echo "    COMP=g++"
+	@echo "        Use the GNU C++ compiler [DEFAULT]"
+	@echo "    COMP=clang++"
+	@echo "        Use LLVM Clang++ compiler"
+	@echo
+	@echo "To do a basic build, simply run:"
+	@echo
+	@echo "    make -f Makefile.linux build"
+	@echo
+
+build: tbprobe.c
+	$(CC) $(CFLAGS) -O3 -D LINUX Gull.cpp tbprobe.c $(LDFLAGS) -o LazyGull
+	$(STRIP) LazyGull
+
+pgo-build: tbprobe.c
+	rm -f *.gcda
+	$(CC) $(CFLAGS) -O3 -fprofile-generate -D LINUX Gull.cpp tbprobe.c \
+        $(LDFLAGS) -o LazyGull
+	./bench.sh ./LazyGull 11
+	$(CC) $(CFLAGS) -O3 -fprofile-use -fno-peel-loops -fno-tracer -D LINUX \
+        Gull.cpp tbprobe.c $(LDFLAGS) -o LazyGull
+	$(STRIP) LazyGull
+
+debug: tbprobe.c
+	$(CC) $(CFLAGS) -O0 -g -D LINUX Gull.cpp tbprobe.c $(LDFLAGS) -o LazyGull
+
+tbprobe.c: Fathom-master.zip
+	unzip -o -j Fathom-master.zip "Fathom-master/src/tbprobe.h" -d "./"
+	unzip -o -j Fathom-master.zip "Fathom-master/src/tbprobe.c" -d "./"
+
+tbcore.c: Fathom-master.zip
+	unzip -o -j Fathom-master.zip "Fathom-master/src/tbcore.h" -d "./"
+	unzip -o -j Fathom-master.zip "Fathom-master/src/tbcore.c" -d "./"
+
+Fathom-master.zip:
+	wget https://github.com/basil00/Fathom/archive/master.zip \
+        -O Fathom-master.zip
+
+clean:
+	rm -f LazyGull tbprobe.o
+
