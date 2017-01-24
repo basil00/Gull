@@ -2249,7 +2249,7 @@ template <bool me> inline void eval_knights(GEvalInfo &EI) {
     }
 }
 template <bool me> inline void eval_king(GEvalInfo &EI) {
-    int cnt = Opening(PVarC(EI, king_att, me));
+    int cnt = Min(15, Opening(PVarC(EI, king_att, me)));
     int score = Endgame(PVarC(EI, king_att, me));
     if (cnt >= 2 && T(Queen(me))) {
         score += (EI.PawnEntry->shelter[opp] * KingShelterQuad)/64;
