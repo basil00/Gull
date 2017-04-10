@@ -1086,6 +1086,7 @@ static void go(void)
                     flags |= FlagPRook; break;
                 case TB_PROMOTES_BISHOP:
                     flags |= (Bit(to) & LightArea? FlagPLight: FlagPDark);
+                    break;
                 case TB_PROMOTES_KNIGHT:
                     flags |= FlagPKnight; break;
                 default:
