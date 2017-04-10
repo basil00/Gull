@@ -156,8 +156,7 @@ void *init_object(const char *object, size_t size, void *addr,
  */
 void remove_object(const char *object)
 {
-    for (unsigned i = 0; i < i < sizeof(handleInfo) / sizeof(handleInfo[0]);
-            i++)
+    for (unsigned i = 0; i < sizeof(handleInfo) / sizeof(handleInfo[0]); i++)
     {
         if (strcmp(handleInfo[i].name, object) == 0)
         {
