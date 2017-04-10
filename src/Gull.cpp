@@ -1765,7 +1765,7 @@ template <bool me> int knpkx() {
     if (Pawn(me) & Line(me, 6) & (DATA->File[0] | DATA->File[7])) {
         int sq = lsb(Pawn(me));
         if (DATA->SArea[sq] & King(opp) & (Line(me, 6) | Line(me, 7))) return 0;
-        if (Square(sq + Push(me)) == IKing(me) && (DATA->SArea[lsb(King(me))] && DATA->SArea[lsb(King(opp))] & Line(me, 7))) return 0;
+        if (Square(sq + Push(me)) == IKing(me) && (DATA->SArea[lsb(King(me))] & DATA->SArea[lsb(King(opp))] & Line(me, 7))) return 0;
     } else if (Pawn(me) & Line(me, 5) & (DATA->File[0] | DATA->File[7])) {
         int sq = lsb(Pawn(me));
         if (Square(sq + Push(me)) == IPawn(opp)) {
