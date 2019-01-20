@@ -1,6 +1,8 @@
 The LazyGull Chess Engine
 =========================
 
+**NOTICE:** LazyGull is no longer maintained.
+
 LazyGull is a free UCI chess engine derived from Gull 3.  Compared to Gull,
 LazyGull implements the following new features:
 
